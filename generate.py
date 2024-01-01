@@ -13,7 +13,7 @@ def header_html(file_name, mp3_files):
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>MP3 Player</title>
+        <title>{}</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
         <link rel="stylesheet" href="style.css">
@@ -22,7 +22,7 @@ def header_html(file_name, mp3_files):
     <body>
         <div class="container">
 
-    """
+    """.format(config.site_name)
 
     if file_name != 'index.html':
         header_html += """
