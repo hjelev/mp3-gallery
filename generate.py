@@ -56,15 +56,16 @@ def generate_mp3_html(public_path, mp3_files):
     mp3_html = ''
     for mp3_file in mp3_files:
         mp3_public_path = os.path.join(public_path, mp3_file)
-        mp3_html += f'''
-        <li class="audio-list list-group-item mp3" data-src="{mp3_public_path}">
-            🎵 {mp3_file}
-            <a href="{mp3_public_path}" download>⬇</a>
-        </li>\n'''
+        mp3_html += """
+        <li class="audio-list list-group-item mp3" data-src="{}">
+            🎵 {}
+            <a href="{}" download>{}</a>
+        </li>\n
+        """.format(mp3_public_path, mp3_file, mp3_public_path, config.download_icon)
     return mp3_html
 
 
-def footer_html(file_name):
+def footer_html(file_name, mp3_files):
     footer_html = """
             </ul>
         </div>
@@ -76,7 +77,7 @@ def footer_html(file_name):
             <button id="backButton2" type="button" class="btn btn-secondary">Back</button>
             """
     footer_html +="""
-            <span class="text-muted">Folder name: {}</span>    
+            <span class="text-muted">{} mp3 files in this folder</span>    
             </div>
         </footer>
         <script src="audioPlayer.js"></script>
@@ -90,7 +91,7 @@ def footer_html(file_name):
         </script>
     </body>
     </html>
-    """.format(file_name.replace('.html',''))
+    """.format(len(mp3_files))
     return footer_html
 
 
@@ -122,7 +123,7 @@ def process_collection(local_path, public_path, html_folder, file_name):
     html = header_html(file_name, mp3_files)
     html += generate_folders_html(local_path, public_path, folders )
     html += generate_mp3_html(public_path, mp3_files)
-    html += footer_html(file_name)
+    html += footer_html(file_name, mp3_files)
     save_html(html, html_folder, file_name)
 
     for folder in folders:
