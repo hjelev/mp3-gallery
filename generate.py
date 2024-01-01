@@ -31,8 +31,8 @@ def header_html(file_name, mp3_files):
         """.format(file_name.replace('.html',''))
     else :
         header_html += """
-                        <h1 class="mt-4 mb-4">🎵 Simple MP3 Player</h1>
-        """
+                        <h1 class="mt-4 mb-4">🎵 {}</h1>
+        """.format(config.site_name)
     if len(mp3_files) > 0:
         header_html += """
         <div class="player-controls">
