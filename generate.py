@@ -1,6 +1,7 @@
+# Scan a folder and generate a HTML files with links to the MP3 files in that folder recursively.
+
 import os
 import config
-
 
 def get_mp3_files(local_path):
     mp3_files = sorted([f for f in os.listdir(local_path) if f.endswith('.mp3')])
@@ -26,13 +27,13 @@ def header_html(file_name, mp3_files):
 
     if file_name != 'index.html':
         header_html += """
-        
                         <h1 class="mt-4 mb-4"><button id="backButton1" type="button" class="btn btn-secondary">Back</button> 📁{}</h1>
         """.format(file_name.replace('.html',''))
     else :
         header_html += """
-                        <h1 class="mt-4 mb-4">🎵 {}</h1>
-        """.format(config.site_name)
+                        <h1 class="mt-4 mb-4">{} {}</h1>
+        """.format(config.site_logo, config.site_name)
+
     if len(mp3_files) > 0:
         header_html += """
         <div class="player-controls">
@@ -55,7 +56,11 @@ def generate_mp3_html(public_path, mp3_files):
     mp3_html = ''
     for mp3_file in mp3_files:
         mp3_public_path = os.path.join(public_path, mp3_file)
-        mp3_html += f'        <li class="audio-list list-group-item mp3" data-src="{mp3_public_path}">🎵 {mp3_file}</li>\n'
+        mp3_html += f'''
+        <li class="audio-list list-group-item mp3" data-src="{mp3_public_path}">
+            🎵 {mp3_file}
+            <a href="{mp3_public_path}" download>⬇</a>
+        </li>\n'''
     return mp3_html
 
 
@@ -98,6 +103,7 @@ def get_folders(local_path):
     folders = sorted([f for f in os.listdir(local_path) if os.path.isdir(os.path.join(local_path, f))])
     return folders
 
+
 def generate_folders_html(local_path, public_path, folders):
 
     folders_html = ''
@@ -108,6 +114,7 @@ def generate_folders_html(local_path, public_path, folders):
         folders_html += f'<li class="audio-list list-group-item folder"><a href="{folder}.html">📁 {folder}</a></li>\n'
 
     return folders_html
+
 
 def process_collection(local_path, public_path, html_folder, file_name):
     folders = get_folders(local_path)
@@ -123,6 +130,7 @@ def process_collection(local_path, public_path, html_folder, file_name):
         folder_path = os.path.join(local_path, folder)
         folder_public_path = os.path.join(public_path, folder)
         process_collection(folder_path, folder_public_path, html_folder, folder_name + '.html')
+
 
 if __name__ == '__main__':
     process_collection(config.local_path, config.public_path, config.html_folder, 'index.html')
