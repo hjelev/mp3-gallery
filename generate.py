@@ -1,15 +1,7 @@
 import os
+import config
 
-# Directory containing the MP3 files
-local_path = '/home/masoko/git/mp3-web-list/web/mp3'
 
-#path to store generated html file
-html_folder = '/home/masoko/git/mp3-web-list/web'
-
-# External path to the MP3 files
-public_path = "http://127.0.0.1:5500/mp3-web-list/web/mp3/"
-
-# Get a list of all MP3 files in the directory
 def get_mp3_files(local_path):
     mp3_files = sorted([f for f in os.listdir(local_path) if f.endswith('.mp3')])
     return mp3_files
@@ -133,4 +125,4 @@ def process_collection(local_path, public_path, html_folder, file_name):
         process_collection(folder_path, folder_public_path, html_folder, folder_name + '.html')
 
 if __name__ == '__main__':
-    process_collection(local_path, public_path, html_folder, 'index.html')
+    process_collection(config.local_path, config.public_path, config.html_folder, 'index.html')

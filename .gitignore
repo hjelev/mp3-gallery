@@ -1,6 +1,7 @@
 *.mp3
 *.html
 web/mp3/*
+config.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

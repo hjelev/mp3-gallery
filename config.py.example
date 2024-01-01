@@ -1,0 +1,8 @@
+# Directory containing the MP3 files
+local_path = '/home/masoko/git/mp3-web-list/web/mp3'
+
+#path to store generated html file
+html_folder = '/home/masoko/git/mp3-web-list/web'
+
+# External path to the MP3 files
+public_path = "http://127.0.0.1:5500/mp3-web-list/web/mp3/"
