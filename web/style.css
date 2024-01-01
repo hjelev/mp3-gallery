@@ -1,0 +1,45 @@
+.audio-list {
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+.audio-list:hover {
+    background-color: #f8f9fa;
+}
+.playing {
+    color: green;
+}
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #343a40 !important;
+        color: #f8f9fa !important;
+    }
+    .audio-list {
+        background-color: #343a40 !important;
+        color: #f8f9fa !important;
+    }
+    .audio-list:hover {
+        background-color: #495057 !important;
+    }
+    .playing {
+        color: lime !important;
+    }
+    body .footer {
+        background-color: #343a40 !important;
+        color: #f8f9fa !important;
+    }
+}
+.player-controls {
+    display: flex;
+    justify-content: left;
+    align-items: flex-start; 
+    gap: 10px;
+}
+
+.player-controls button,
+.player-controls audio {
+    margin: 0;
+    padding: 10;
+    border: none;
+    font-size: 100%;
+    vertical-align: top;
+}
