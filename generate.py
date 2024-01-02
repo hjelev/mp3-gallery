@@ -2,6 +2,11 @@
 
 import os
 import config
+import glob
+
+def count_mp3_files(path):
+    return len(glob.glob(os.path.join(path, '**', '*.mp3'), recursive=True))
+
 
 def get_mp3_files(local_path):
     mp3_files = sorted([f for f in os.listdir(local_path) if f.endswith('.mp3')])
@@ -65,7 +70,7 @@ def generate_mp3_html(public_path, mp3_files):
     return mp3_html
 
 
-def footer_html(file_name, mp3_files):
+def footer_html(file_name, mp3_files, folders):
     footer_html = """
             </ul>
         </div>
@@ -76,8 +81,16 @@ def footer_html(file_name, mp3_files):
         footer_html += """
             <button id="backButton2" type="button" class="btn btn-secondary">Back</button>
             """
+        if (len(mp3_files) > 0):
+            footer_html += """
+                    <span class="text-muted">{} mp3 files in this folder</span>  
+                    """.format(len(mp3_files))
+        if (len(folders) > 0):
+            footer_html += """
+            <span class="text-muted">{} folders</span>  
+            """.format(len(folders))
+
     footer_html +="""
-            <span class="text-muted">{} mp3 files in this folder</span>    
             </div>
         </footer>
         <script src="audioPlayer.js"></script>
@@ -105,25 +118,21 @@ def get_folders(local_path):
     return folders
 
 
-def generate_folders_html(local_path, public_path, folders):
-
+def generate_folders_html(folders):
     folders_html = ''
     for folder in folders:
-        folder_path = os.path.join(local_path, folder)
-        folder_public_path = os.path.join(public_path, folder)
-
         folders_html += f'<li class="audio-list list-group-item folder"><a href="{folder}.html">📁 {folder}</a></li>\n'
 
     return folders_html
 
 
-def process_collection(local_path, public_path, html_folder, file_name):
+def process_collection(local_path, public_path, html_folder, file_name, parent_folder=None):
     folders = get_folders(local_path)
     mp3_files = get_mp3_files(local_path)
     html = header_html(file_name, mp3_files)
-    html += generate_folders_html(local_path, public_path, folders )
+    html += generate_folders_html(folders)
     html += generate_mp3_html(public_path, mp3_files)
-    html += footer_html(file_name, mp3_files)
+    html += footer_html(file_name, mp3_files, folders)
     save_html(html, html_folder, file_name)
 
     for folder in folders:
