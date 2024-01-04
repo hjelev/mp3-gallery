@@ -4,6 +4,7 @@ import os
 import config
 import glob
 
+
 def count_mp3_files(path):
     return len(glob.glob(os.path.join(path, '**', '*.mp3'), recursive=True))
 
@@ -27,7 +28,6 @@ def header_html(file_name, mp3_files):
     </head>
     <body>
         <div class="container">
-
     """.format(config.site_name)
 
     if file_name != 'index.html':
@@ -70,7 +70,7 @@ def generate_mp3_html(public_path, mp3_files):
     return mp3_html
 
 
-def footer_html(file_name, mp3_files, folders):
+def footer_html(file_name, mp3_files, folders, total_mp3_count):
     footer_html = """
             </ul>
         </div>
@@ -81,14 +81,21 @@ def footer_html(file_name, mp3_files, folders):
         footer_html += """
             <button id="backButton2" type="button" class="btn btn-secondary">Back</button>
             """
-        if (len(mp3_files) > 0):
-            footer_html += """
-                    <span class="text-muted">{} mp3 files in this folder</span>  
-                    """.format(len(mp3_files))
-        if (len(folders) > 0):
-            footer_html += """
-            <span class="text-muted">{} folders</span>  
-            """.format(len(folders))
+    else:
+        footer_html += """
+                        <span class="text-muted align-right">{} mp3 files in {} folders</span>  
+                        """.format(total_mp3_count, len(folders))
+
+
+    if (len(mp3_files) > 0):
+        footer_html += """
+                <span class="text-muted align-right">{} mp3 files in this folder</span>  
+                """.format(len(mp3_files))
+        
+    if len(folders) > 0 and file_name != 'index.html':
+        footer_html += """
+        <span class="text-muted align-right">{} folders</span>  
+        """.format(len(folders))
 
     footer_html +="""
             </div>
@@ -127,12 +134,13 @@ def generate_folders_html(folders):
 
 
 def process_collection(local_path, public_path, html_folder, file_name, parent_folder=None):
+    total_mp3_count = count_mp3_files(local_path)
     folders = get_folders(local_path)
     mp3_files = get_mp3_files(local_path)
     html = header_html(file_name, mp3_files)
     html += generate_folders_html(folders)
     html += generate_mp3_html(public_path, mp3_files)
-    html += footer_html(file_name, mp3_files, folders)
+    html += footer_html(file_name, mp3_files, folders, total_mp3_count)
     save_html(html, html_folder, file_name)
 
     for folder in folders:
