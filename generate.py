@@ -22,7 +22,7 @@ def header_html(file_name, mp3_files):
         <title>{}</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="files/style.css">
         <link rel="icon" type="image/x-icon" href="https://icons.iconarchive.com/icons/icondesigner.net/hyperion/32/Sidebar-Music-icon.png">
     </head>
     <body>
@@ -93,7 +93,7 @@ def footer_html(file_name, mp3_files, folders):
     footer_html +="""
             </div>
         </footer>
-        <script src="audioPlayer.js"></script>
+        <script src="files/audioPlayer.js"></script>
                 <script>
             document.getElementById('backButton1').addEventListener('click', function() {{
                 window.history.back();
