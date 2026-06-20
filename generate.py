@@ -52,9 +52,23 @@ def get_mp3_files(local_path):
     return mp3_files
 
 
+def folder_has_audio(local_path):
+    """True if this folder or any descendant contains an audio file."""
+    for _root, _dirs, files in os.walk(local_path):
+        if any(f.lower().endswith(AUDIO_EXTS) for f in files):
+            return True
+    return False
+
+
 def get_folders(local_path):
+    """List subfolders that contain audio (recursively).
+
+    Art-only folders (e.g. a ``Cover`` folder holding just images) are skipped
+    so they are never rendered or linked; their art is still reused via
+    :func:`find_folder_cover`.
+    """
     folders = sorted([f for f in os.listdir(local_path) if os.path.isdir(os.path.join(local_path, f))])
-    return folders
+    return [f for f in folders if folder_has_audio(os.path.join(local_path, f))]
 
 
 def clean_title_from_filename(filename):
@@ -103,8 +117,9 @@ def _save_cover_file(src_path, covers_dir):
     return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
 
 
-def find_folder_cover(local_path):
-    """Return the abs path to the best standalone cover image in this folder, or None.
+def _best_cover_in_dir(local_path):
+    """Return the abs path to the best standalone cover image directly in a
+    single folder, or None.
 
     Only known cover-style filenames are considered so that incidental images
     (back/inside/booklet/spectrum scans) are never picked.
@@ -145,6 +160,33 @@ def find_folder_cover(local_path):
             # Tie-break by extension preference order.
             candidates.sort(key=lambda img: _IMAGE_EXTS.index(img[1]))
             return os.path.join(local_path, candidates[0][2])
+    return None
+
+
+def find_folder_cover(local_path):
+    """Return the abs path to the best cover image for this folder, or None.
+
+    Looks in the folder itself first, then falls back to any art-only
+    subfolder (e.g. a ``Cover`` folder that holds only images and no audio),
+    so cover art is reused even though such folders are not listed.
+    """
+    cover = _best_cover_in_dir(local_path)
+    if cover:
+        return cover
+
+    try:
+        subdirs = sorted(f for f in os.listdir(local_path)
+                         if os.path.isdir(os.path.join(local_path, f)))
+    except OSError:
+        return None
+
+    for sub in subdirs:
+        sub_path = os.path.join(local_path, sub)
+        if folder_has_audio(sub_path):
+            continue
+        cover = _best_cover_in_dir(sub_path)
+        if cover:
+            return cover
     return None
 
 
