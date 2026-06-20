@@ -294,25 +294,54 @@ def header_html(file_name, mp3_files):
     head += """
                 <div class="topbar-actions">
                     <input id="search" type="search" class="search-input" placeholder="Search tracks…" aria-label="Search tracks" autocomplete="off">
+                    <button id="layoutToggle" type="button" class="icon-btn" title="Toggle layout" aria-label="Toggle layout">☰</button>
                     <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
                 </div>
             </div>
         </header>
         <main class="container">
-            <ul id="audioFiles" class="track-list">
+            <ul id="audioFiles" class="track-list grid-view">
     """
     return head
 
 
-def generate_folders_html(folders):
+def folder_card_meta(folder_path, covers_dir):
+    """Return (cover_url, artist) for a folder's album-style card.
+
+    Cover reuses :func:`find_folder_cover`; artist is taken from the first
+    audio track directly in the folder (blank when there is none).
+    """
+    cover_url = _save_cover_file(find_folder_cover(folder_path), covers_dir)
+    artist = ''
+    mp3_files = get_mp3_files(folder_path)
+    if mp3_files:
+        first = mp3_files[0]
+        meta = extract_metadata(os.path.join(folder_path, first), first, covers_dir, cover_url)
+        artist = meta['artist']
+        # Fall back to the first track's embedded art when no standalone cover exists.
+        if not cover_url:
+            cover_url = meta['cover_url']
+    return cover_url, artist
+
+
+def generate_folders_html(folders, local_path, covers_dir):
     folders_html = ''
     for folder in folders:
         safe = html.escape(folder)
+        cover_url, artist = folder_card_meta(os.path.join(local_path, folder), covers_dir)
+        artist_safe = html.escape(artist)
+        if cover_url:
+            cover_html = f'<img src="{url_path(cover_url)}" alt="" loading="lazy">'
+        else:
+            cover_html = '<span class="cover-fallback">📁</span>'
         folders_html += (
-            '<li class="folder-row">'
+            f'<li class="folder-row" data-title="{safe}" data-artist="{artist_safe}">'
             f'<a href="{url_path(folder + ".html")}">'
-            '<span class="folder-glyph">📁</span>'
+            f'<span class="folder-cover">{cover_html}</span>'
+            '<span class="folder-meta">'
             f'<span class="folder-name">{safe}</span>'
+            f'<span class="folder-sub">{artist_safe}</span>'
+            '</span>'
             '<span class="chevron">›</span>'
             '</a></li>\n'
         )
@@ -448,7 +477,7 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     folder_cover_url = _save_cover_file(find_folder_cover(local_path), covers_dir)
 
     page = header_html(file_name, mp3_files)
-    page += generate_folders_html(folders)
+    page += generate_folders_html(folders, local_path, covers_dir)
     page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url)
     page += footer_html(file_name, mp3_files, folders, total_mp3_count)
     save_html(page, html_folder, file_name)

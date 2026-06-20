@@ -163,7 +163,33 @@ body {
 }
 .folder-row a:hover { background: var(--row-hover); }
 .folder-glyph { font-size: 1.2rem; }
-.folder-name { flex: 1; }
+.folder-cover {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.folder-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.folder-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.folder-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-sub {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-sub:empty { display: none; }
 .chevron { color: var(--muted); font-size: 1.3rem; }
 
 /* ---- Track rows ---- */
@@ -247,6 +273,64 @@ body {
 .track.playing .track-title,
 .track.playing .track-index { color: var(--playing); }
 .track.playing .track-index { font-weight: 700; }
+
+/* ---- Grid (big icons) view ---- */
+.track-list.grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+}
+
+.grid-view .track,
+.grid-view .folder-row a {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    position: relative;
+    grid-template-columns: none;
+    gap: 8px;
+    padding: 8px;
+}
+
+.grid-view .track-cover,
+.grid-view .folder-cover {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+}
+.grid-view .cover-fallback { font-size: 2.6rem; }
+
+.grid-view .track-index,
+.grid-view .track-duration,
+.grid-view .chevron { display: none; }
+
+.grid-view .track-meta,
+.grid-view .folder-meta {
+    gap: 2px;
+}
+.grid-view .track-title,
+.grid-view .folder-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Track action buttons overlay the cover on hover */
+.grid-view .track-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    gap: 2px;
+    border-radius: 8px;
+    background: transparent;
+    transition: background 0.15s ease;
+}
+.grid-view .track:hover .track-actions,
+.grid-view .track:focus-within .track-actions {
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+}
 
 /* ---- Footer ---- */
 .footer {
@@ -453,7 +537,7 @@ body {
 
 @media (max-width: 480px) {
     .topbar-inner { flex-wrap: wrap; }
-    .track { grid-template-columns: 44px 1fr auto; }
-    .track-index { display: none; }
-    .track-actions { display: none; }
+    .track-list:not(.grid-view) .track { grid-template-columns: 44px 1fr auto; }
+    .track-list:not(.grid-view) .track-index { display: none; }
+    .track-list:not(.grid-view) .track-actions { display: none; }
 }
