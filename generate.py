@@ -4,6 +4,13 @@ import os
 import glob
 import hashlib
 import html
+from urllib.parse import quote
+
+
+def url_path(path):
+    """Percent-encode a path for safe use in an href (e.g. ``%`` -> ``%25``,
+    spaces -> ``%20``), preserving ``/`` separators."""
+    return html.escape(quote(path, safe='/'))
 
 import config
 
@@ -29,13 +36,19 @@ _MIME_EXT = {
 # Standalone cover image extensions, in preference order.
 _IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 
+# Audio file extensions to include (lowercase, matched case-insensitively).
+AUDIO_EXTS = ('.mp3', '.flac')
+
 
 def count_mp3_files(path):
-    return len(glob.glob(os.path.join(glob.escape(path), '**', '*.mp3'), recursive=True))
+    total = 0
+    for _root, _dirs, files in os.walk(path):
+        total += sum(1 for f in files if f.lower().endswith(AUDIO_EXTS))
+    return total
 
 
 def get_mp3_files(local_path):
-    mp3_files = sorted([f for f in os.listdir(local_path) if f.endswith('.mp3')])
+    mp3_files = sorted([f for f in os.listdir(local_path) if f.lower().endswith(AUDIO_EXTS)])
     return mp3_files
 
 
@@ -255,7 +268,7 @@ def generate_folders_html(folders):
         safe = html.escape(folder)
         folders_html += (
             '<li class="folder-row">'
-            f'<a href="{html.escape(folder)}.html">'
+            f'<a href="{url_path(folder + ".html")}">'
             '<span class="folder-glyph">📁</span>'
             f'<span class="folder-name">{safe}</span>'
             '<span class="chevron">›</span>'
@@ -281,7 +294,7 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
         sub = ' · '.join(sub_parts)
 
         if cover:
-            cover_html = f'<img src="{html.escape(cover)}" alt="" loading="lazy">'
+            cover_html = f'<img src="{url_path(cover)}" alt="" loading="lazy">'
         else:
             cover_html = '<span class="cover-fallback">🎵</span>'
 
@@ -297,12 +310,12 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
             <a class="track-download" href="{src}" download title="Download" aria-label="Download">{download_icon}</a>
         </li>
         """.format(
-            src=html.escape(mp3_public_path),
+            src=url_path(mp3_public_path),
             title=title,
             artist=artist,
             album=album,
             duration=duration,
-            cover=html.escape(cover or ''),
+            cover=url_path(cover or ''),
             cover_html=cover_html,
             index=index,
             sub=sub,
@@ -314,9 +327,9 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
 def footer_html(file_name, mp3_files, folders, total_mp3_count):
     stats = []
     if file_name == 'index.html':
-        stats.append(f'{total_mp3_count} mp3 files in {len(folders)} folders')
+        stats.append(f'{total_mp3_count} audio files in {len(folders)} folders')
     if len(mp3_files) > 0:
-        stats.append(f'{len(mp3_files)} mp3 files in this folder')
+        stats.append(f'{len(mp3_files)} audio files in this folder')
     if len(folders) > 0 and file_name != 'index.html':
         stats.append(f'{len(folders)} folders')
     stats_html = ' · '.join(html.escape(s) for s in stats)
