@@ -349,7 +349,11 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
                 <span class="track-sub">{sub}</span>
             </span>
             <span class="track-duration">{duration}</span>
-            <a class="track-download" href="{src}" download title="Download" aria-label="Download">{download_icon}</a>
+            <span class="track-actions">
+                <button class="track-action play-next" title="Play next" aria-label="Play next">⏭</button>
+                <button class="track-action add-queue" title="Add to queue" aria-label="Add to queue">＋</button>
+                <a class="track-download" href="{src}" download title="Download" aria-label="Download">{download_icon}</a>
+            </span>
         </li>
         """.format(
             src=url_path(mp3_public_path),
@@ -401,6 +405,7 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
                 <button id="playButton" class="icon-btn play" title="Play/Pause" aria-label="Play/Pause">▶</button>
                 <button id="nextButton" class="icon-btn" title="Next" aria-label="Next">⏭</button>
                 <button id="repeatButton" class="icon-btn" title="Repeat" aria-label="Repeat">🔁</button>
+                <button id="queueButton" class="icon-btn" title="Queue" aria-label="Queue">☰</button>
             </div>
             <div class="pb-progress">
                 <span id="pbCurrent" class="pb-time">0:00</span>
@@ -412,6 +417,15 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
                 <input id="volume" class="volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Volume">
             </div>
         </div>
+        <div id="queueBackdrop" class="queue-backdrop" hidden></div>
+        <aside id="queuePanel" class="queue-panel" hidden aria-label="Play queue">
+            <div class="queue-head">
+                <span class="queue-title">Up Next</span>
+                <button id="queueClear" class="queue-clear" title="Clear queue">Clear</button>
+                <button id="queueClose" class="icon-btn" title="Close" aria-label="Close queue">✕</button>
+            </div>
+            <ul id="queueList" class="queue-list"></ul>
+        </aside>
         """
 
     footer += """

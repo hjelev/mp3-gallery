@@ -10,6 +10,8 @@ Easiest way to host your mp3 collection online — generate a modern static HTML
 - 🔍 Instant client-side search/filter of tracks and folders
 - ▶️ Sticky bottom player bar with scrubber, time, volume, prev/next
 - 🔀 Shuffle and 🔁 repeat (off / all / one) playback modes
+- ☰ Editable play queue — "play next" / "add to queue" per track, with a slide-out
+  drawer to reorder (drag), remove or clear; persists in the browser
 - 🌙 Theme toggle and resume of the last track + position (saved in the browser)
 - 📁 Recursive folder navigation
 

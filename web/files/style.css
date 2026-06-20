@@ -220,16 +220,26 @@ body {
     font-size: 0.85rem;
 }
 
+.track-actions { display: flex; align-items: center; gap: 2px; }
+.track-action,
 .track-download {
     color: var(--muted);
     text-decoration: none;
     font-size: 1rem;
+    line-height: 1;
     padding: 4px 8px;
+    border: none;
+    background: transparent;
     border-radius: 8px;
+    cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
-.track:hover .track-download { opacity: 1; }
+.track:hover .track-action,
+.track:hover .track-download,
+.track:focus-within .track-action,
+.track:focus-within .track-download { opacity: 1; }
+.track-action:hover,
 .track-download:hover { background: var(--surface-2); color: var(--accent); }
 
 /* Playing state */
@@ -313,6 +323,114 @@ body {
     border: none;
 }
 
+/* ---- Queue drawer ---- */
+.queue-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 76px;
+    width: 340px;
+    max-width: 88vw;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    transform: translateX(0);
+    transition: transform 0.2s ease;
+}
+.queue-panel[hidden] {
+    display: flex;
+    transform: translateX(100%);
+    pointer-events: none;
+}
+.queue-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.queue-title { font-weight: 600; flex: 1; }
+.queue-clear {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+    border-radius: 8px;
+}
+.queue-clear:hover { background: var(--surface-2); color: var(--accent); }
+.queue-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    overflow-y: auto;
+    flex: 1;
+}
+.queue-item {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.queue-item:hover { background: var(--row-hover); }
+.queue-item.dragging { opacity: 0.5; }
+.queue-item.drag-over { box-shadow: inset 0 2px 0 var(--accent); }
+.queue-item.current { background: var(--accent-soft); }
+.queue-item.current .queue-item-title { color: var(--playing); font-weight: 700; }
+.queue-cover {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+.queue-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.queue-item-meta { min-width: 0; display: flex; flex-direction: column; }
+.queue-item-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.queue-item-sub {
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.queue-remove {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 4px 6px;
+    border-radius: 8px;
+}
+.queue-remove:hover { background: var(--surface-2); color: var(--accent); }
+.queue-empty { color: var(--muted); font-size: 0.85rem; padding: 16px 12px; text-align: center; }
+.queue-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(0, 0, 0, 0.4);
+    display: none; /* desktop keeps the page interactive; shown on mobile only */
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 720px) {
     .search-input { width: 130px; }
@@ -329,11 +447,13 @@ body {
     .pb-progress { grid-area: progress; }
     .pb-volume { display: none; }
     body { padding-bottom: 120px; }
+    .queue-panel { width: 100%; max-width: 100%; bottom: 120px; }
+    .queue-backdrop:not([hidden]) { display: block; }
 }
 
 @media (max-width: 480px) {
     .topbar-inner { flex-wrap: wrap; }
     .track { grid-template-columns: 44px 1fr auto; }
     .track-index { display: none; }
-    .track-download { display: none; }
+    .track-actions { display: none; }
 }
