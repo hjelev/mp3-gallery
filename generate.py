@@ -28,7 +28,7 @@ _MIME_EXT = {
 
 
 def count_mp3_files(path):
-    return len(glob.glob(os.path.join(path, '**', '*.mp3'), recursive=True))
+    return len(glob.glob(os.path.join(glob.escape(path), '**', '*.mp3'), recursive=True))
 
 
 def get_mp3_files(local_path):
