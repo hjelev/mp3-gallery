@@ -3,6 +3,7 @@
     'use strict';
 
     var THEME_KEY = 'mp3gallery:theme';
+    var LAYOUT_KEY = 'mp3gallery:layout';
     var RESUME_KEY = 'mp3gallery:resume';
     var QUEUE_KEY = 'mp3gallery:queue';
 
@@ -30,6 +31,27 @@
             var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
             applyTheme(next);
             try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+        });
+    }
+
+    /* ---------- Layout (grid is the default applied server-side) ---------- */
+    var layoutToggle = document.getElementById('layoutToggle');
+    var trackList = document.getElementById('audioFiles');
+
+    function applyLayout(layout) {
+        if (trackList) trackList.classList.toggle('grid-view', layout !== 'list');
+        if (layoutToggle) layoutToggle.textContent = layout === 'list' ? '▦' : '☰';
+    }
+
+    var savedLayout = null;
+    try { savedLayout = localStorage.getItem(LAYOUT_KEY); } catch (e) {}
+    applyLayout(savedLayout === 'list' ? 'list' : 'grid');
+
+    if (layoutToggle) {
+        layoutToggle.addEventListener('click', function () {
+            var next = (trackList && trackList.classList.contains('grid-view')) ? 'list' : 'grid';
+            applyLayout(next);
+            try { localStorage.setItem(LAYOUT_KEY, next); } catch (e) {}
         });
     }
 
