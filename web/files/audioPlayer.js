@@ -107,17 +107,59 @@
     var queueList = document.getElementById('queueList');
     var queueClose = document.getElementById('queueClose');
     var queueClear = document.getElementById('queueClear');
+    var addFolderButton = document.getElementById('addFolderButton');
 
-    // The queue holds DOM-track indices (into `tracks`). It starts as the full
-    // list in order, so default playback behaviour is unchanged. `queuePos` is
-    // the position within `queue` of the track that's playing (-1 = none).
-    var queue = tracks.map(function (_, i) { return i; });
+    var queueDialog = document.getElementById('queueDialog');
+    var queueDialogBackdrop = document.getElementById('queueDialogBackdrop');
+
+    // The queue holds self-contained track descriptors ({src,title,artist,
+    // album,duration,cover}) rather than DOM indices, so it survives navigation
+    // between folder pages. It starts empty and is filled from the saved queue
+    // or by the user's actions. `queuePos` is the position within `queue` of the
+    // track that's playing (-1 = none). `src` is an absolute URL for reliable
+    // matching across pages.
+    var queue = [];
     var queuePos = -1;
     var shuffle = false;
     var repeatMode = 'off'; // off | all | one
     var seeking = false;
 
-    function currentTrackIndex() { return queuePos >= 0 ? queue[queuePos] : -1; }
+    function currentDescriptor() {
+        return (queuePos >= 0 && queuePos < queue.length) ? queue[queuePos] : null;
+    }
+
+    function absUrl(src) {
+        var a = document.createElement('a');
+        a.href = src || '';
+        return a.href;
+    }
+
+    function descriptorFromEl(el) {
+        return {
+            src: absUrl(el.getAttribute('data-src')),
+            title: el.getAttribute('data-title') || '',
+            artist: el.getAttribute('data-artist') || '',
+            album: el.getAttribute('data-album') || '',
+            duration: el.getAttribute('data-duration') || '',
+            cover: el.getAttribute('data-cover') || ''
+        };
+    }
+
+    function folderDescriptors() { return tracks.map(descriptorFromEl); }
+
+    function queueIndexOfSrc(src) {
+        for (var i = 0; i < queue.length; i++) {
+            if (queue[i].src === src) return i;
+        }
+        return -1;
+    }
+
+    function elForSrc(src) {
+        for (var i = 0; i < tracks.length; i++) {
+            if (absUrl(tracks[i].getAttribute('data-src')) === src) return tracks[i];
+        }
+        return null;
+    }
 
     function fmt(s) {
         if (!isFinite(s) || s < 0) s = 0;
@@ -127,27 +169,23 @@
         return m + ':' + (sec < 10 ? '0' : '') + sec;
     }
 
-    function setActive(index) {
+    function setActive(src) {
         tracks.forEach(function (t) { t.classList.remove('playing'); });
-        var el = tracks[index];
+        var el = elForSrc(src);
         if (el) el.classList.add('playing');
     }
 
-    function loadTrack(index, autoplay) {
-        if (index < 0 || index >= tracks.length) return;
-        var el = tracks[index];
-        player.src = el.getAttribute('data-src');
+    function loadDescriptor(d, autoplay) {
+        if (!d) return;
+        player.src = d.src;
         if (bar) bar.hidden = false;
-        setActive(index);
+        setActive(d.src);
 
-        var cover = el.getAttribute('data-cover');
-        if (cover) { pbCover.src = cover; pbCover.style.visibility = 'visible'; }
+        if (d.cover) { pbCover.src = d.cover; pbCover.style.visibility = 'visible'; }
         else { pbCover.removeAttribute('src'); pbCover.style.visibility = 'hidden'; }
 
-        pbTitle.textContent = el.getAttribute('data-title') || '';
-        var artist = el.getAttribute('data-artist') || '';
-        var album = el.getAttribute('data-album') || '';
-        pbArtist.textContent = [artist, album].filter(Boolean).join(' · ');
+        pbTitle.textContent = d.title || '';
+        pbArtist.textContent = [d.artist, d.album].filter(Boolean).join(' · ');
 
         if (autoplay) {
             var p = player.play();
@@ -177,42 +215,47 @@
     function playQueuePos(pos) {
         if (pos < 0 || pos >= queue.length) return;
         queuePos = pos;
-        loadTrack(queue[pos], true);
+        loadDescriptor(queue[pos], true);
         renderQueue();
         saveQueue();
     }
 
-    function playTrack(trackIndex) {
-        var pos = queue.indexOf(trackIndex);
-        if (pos === -1) { // was removed from the queue — re-insert after current
-            pos = queuePos >= 0 ? queuePos + 1 : queue.length;
-            queue.splice(pos, 0, trackIndex);
-        }
-        playQueuePos(pos);
-    }
-
     /* ---------- Queue mutation ---------- */
     // Drop a track from the queue (but never the one playing), keeping queuePos valid.
-    function removeFromQueue(trackIndex) {
-        var idx = queue.indexOf(trackIndex);
+    function removeFromQueue(src) {
+        var idx = queueIndexOfSrc(src);
         if (idx === -1 || idx === queuePos) return;
         queue.splice(idx, 1);
         if (idx < queuePos) queuePos--;
     }
 
-    function playNext(trackIndex) {
-        removeFromQueue(trackIndex);
+    function playNextDesc(d) {
+        removeFromQueue(d.src);
         var at = queuePos >= 0 ? queuePos + 1 : 0;
-        queue.splice(at, 0, trackIndex);
+        queue.splice(at, 0, d);
         renderQueue();
         saveQueue();
     }
 
-    function addToQueue(trackIndex) {
-        removeFromQueue(trackIndex);
-        queue.push(trackIndex);
+    function addToQueueDesc(d) {
+        removeFromQueue(d.src);
+        queue.push(d);
         renderQueue();
         saveQueue();
+    }
+
+    // Append every track on the current page that isn't already queued.
+    function appendFolder() {
+        folderDescriptors().forEach(function (fd) {
+            if (queueIndexOfSrc(fd.src) === -1) queue.push(fd);
+        });
+    }
+
+    function addFolderToQueue() {
+        appendFolder();
+        renderQueue();
+        saveQueue();
+        openQueue();
     }
 
     function removeAt(pos) {
@@ -225,10 +268,10 @@
 
     function moveItem(from, to) {
         if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
-        var curDom = currentTrackIndex();
+        var cur = currentDescriptor();
         var item = queue.splice(from, 1)[0];
         queue.splice(to, 0, item);
-        if (curDom >= 0) queuePos = queue.indexOf(curDom);
+        if (cur) queuePos = queue.indexOf(cur);
         renderQueue();
         saveQueue();
     }
@@ -251,8 +294,7 @@
             queueList.appendChild(empty);
             return;
         }
-        queue.forEach(function (trackIndex, pos) {
-            var t = tracks[trackIndex];
+        queue.forEach(function (d, pos) {
             var li = document.createElement('li');
             li.className = 'queue-item' + (pos === queuePos ? ' current' : '');
             li.setAttribute('draggable', 'true');
@@ -260,10 +302,9 @@
 
             var coverWrap = document.createElement('span');
             coverWrap.className = 'queue-cover';
-            var coverSrc = t.getAttribute('data-cover');
-            if (coverSrc) {
+            if (d.cover) {
                 var img = document.createElement('img');
-                img.src = coverSrc;
+                img.src = d.cover;
                 img.alt = '';
                 coverWrap.appendChild(img);
             } else {
@@ -274,12 +315,10 @@
             meta.className = 'queue-item-meta';
             var title = document.createElement('span');
             title.className = 'queue-item-title';
-            title.textContent = t.getAttribute('data-title') || '';
+            title.textContent = d.title || '';
             var sub = document.createElement('span');
             sub.className = 'queue-item-sub';
-            var artist = t.getAttribute('data-artist') || '';
-            var album = t.getAttribute('data-album') || '';
-            sub.textContent = [artist, album].filter(Boolean).join(' · ');
+            sub.textContent = [d.artist, d.album].filter(Boolean).join(' · ');
             meta.appendChild(title);
             meta.appendChild(sub);
 
@@ -297,20 +336,74 @@
         });
     }
 
+    /* ---------- "Keep current queue?" dialog ---------- */
+    var pendingChoice = null;
+
+    function hideDialog() {
+        if (queueDialog) queueDialog.hidden = true;
+        if (queueDialogBackdrop) queueDialogBackdrop.hidden = true;
+    }
+
+    function resolveChoice(choice) {
+        var cb = pendingChoice;
+        pendingChoice = null;
+        hideDialog();
+        if (cb) cb(choice);
+    }
+
+    // Ask what to do with the existing queue, then run cb('replace'|'song'|'folder'|'cancel').
+    function askQueueChoice(cb) {
+        if (!queueDialog) { cb('replace'); return; } // graceful fallback if markup is missing
+        pendingChoice = cb;
+        queueDialog.hidden = false;
+        if (queueDialogBackdrop) queueDialogBackdrop.hidden = false;
+    }
+
+    // Click on a track row: decide how it joins the queue, then play it.
+    function playFromRow(el) {
+        var d = descriptorFromEl(el);
+        var pos = queueIndexOfSrc(d.src);
+        if (pos !== -1) { playQueuePos(pos); return; } // already queued — just play it
+
+        if (!queue.length) { // nothing to preserve — queue the whole folder
+            queue = folderDescriptors();
+            playQueuePos(queueIndexOfSrc(d.src));
+            return;
+        }
+
+        askQueueChoice(function (choice) {
+            if (choice === 'cancel') return;
+            if (choice === 'replace') {
+                queue = folderDescriptors();
+                playQueuePos(queueIndexOfSrc(d.src));
+            } else if (choice === 'song') {
+                queue.push(d);
+                playQueuePos(queue.length - 1);
+            } else if (choice === 'folder') {
+                appendFolder();
+                playQueuePos(queueIndexOfSrc(d.src));
+            }
+        });
+    }
+
     /* ---------- Track row interactions ---------- */
-    tracks.forEach(function (el, i) {
+    tracks.forEach(function (el) {
         el.addEventListener('click', function (e) {
             if (e.target.closest('.track-download')) return; // let downloads through
-            if (e.target.closest('.play-next')) { e.stopPropagation(); playNext(i); return; }
-            if (e.target.closest('.add-queue')) { e.stopPropagation(); addToQueue(i); return; }
-            if (i === currentTrackIndex() && !player.paused) { player.pause(); return; }
-            if (i === currentTrackIndex() && player.paused && player.src) { player.play(); return; }
-            playTrack(i);
+            if (e.target.closest('.play-next')) { e.stopPropagation(); playNextDesc(descriptorFromEl(el)); return; }
+            if (e.target.closest('.add-queue')) { e.stopPropagation(); addToQueueDesc(descriptorFromEl(el)); return; }
+            var cur = currentDescriptor();
+            var src = absUrl(el.getAttribute('data-src'));
+            if (cur && cur.src === src && !player.paused) { player.pause(); return; }
+            if (cur && cur.src === src && player.paused && player.src) { player.play(); return; }
+            playFromRow(el);
         });
     });
 
+    if (addFolderButton) addFolderButton.addEventListener('click', addFolderToQueue);
+
     if (playBtn) playBtn.addEventListener('click', function () {
-        if (queuePos === -1) { playQueuePos(0); return; }
+        if (queuePos === -1) { if (queue.length) playQueuePos(0); return; }
         if (player.paused) player.play(); else player.pause();
     });
     if (nextBtn) nextBtn.addEventListener('click', function () { playQueuePos(nextPos()); });
@@ -348,6 +441,20 @@
     if (queueClose) queueClose.addEventListener('click', closeQueue);
     if (queueBackdrop) queueBackdrop.addEventListener('click', closeQueue);
     if (queueClear) queueClear.addEventListener('click', clearQueue);
+
+    /* ---------- Dialog controls ---------- */
+    var qdReplace = document.getElementById('qdReplace');
+    var qdAddSong = document.getElementById('qdAddSong');
+    var qdAddFolder = document.getElementById('qdAddFolder');
+    var qdCancel = document.getElementById('qdCancel');
+    if (qdReplace) qdReplace.addEventListener('click', function () { resolveChoice('replace'); });
+    if (qdAddSong) qdAddSong.addEventListener('click', function () { resolveChoice('song'); });
+    if (qdAddFolder) qdAddFolder.addEventListener('click', function () { resolveChoice('folder'); });
+    if (qdCancel) qdCancel.addEventListener('click', function () { resolveChoice('cancel'); });
+    if (queueDialogBackdrop) queueDialogBackdrop.addEventListener('click', function () { resolveChoice('cancel'); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && queueDialog && !queueDialog.hidden) resolveChoice('cancel');
+    });
 
     if (queueList) {
         queueList.addEventListener('click', function (e) {
@@ -448,54 +555,51 @@
 
     function saveQueue() {
         try {
-            localStorage.setItem(QUEUE_KEY, JSON.stringify({
-                n: tracks.length, queue: queue, pos: queuePos
-            }));
+            localStorage.setItem(QUEUE_KEY, JSON.stringify({ queue: queue, pos: queuePos }));
         } catch (e) {}
     }
 
+    // The queue is self-contained, so it restores regardless of which folder
+    // page we're on. Items from an older index-based format are ignored.
     function restoreQueue() {
         var data = null;
         try { data = JSON.parse(localStorage.getItem(QUEUE_KEY) || 'null'); } catch (e) {}
-        // Only trust a saved queue if the track list looks unchanged.
-        if (!data || data.n !== tracks.length || !Array.isArray(data.queue) || !data.queue.length) return;
+        if (!data || !Array.isArray(data.queue)) return;
+        var clean = [];
         var seen = {};
         for (var i = 0; i < data.queue.length; i++) {
-            var v = data.queue[i];
-            if (typeof v !== 'number' || v < 0 || v >= tracks.length || seen[v]) return;
-            seen[v] = 1;
+            var d = data.queue[i];
+            if (!d || typeof d !== 'object' || typeof d.src !== 'string' || !d.src || seen[d.src]) continue;
+            seen[d.src] = 1;
+            clean.push({
+                src: d.src,
+                title: d.title || '',
+                artist: d.artist || '',
+                album: d.album || '',
+                duration: d.duration || '',
+                cover: d.cover || ''
+            });
         }
-        queue = data.queue.slice();
-        queuePos = (typeof data.pos === 'number' && data.pos >= -1 && data.pos < queue.length) ? data.pos : -1;
+        queue = clean;
+        queuePos = (typeof data.pos === 'number' && data.pos >= 0 && data.pos < queue.length) ? data.pos : -1;
     }
 
     /* ---------- Init: restore queue, then resume the last track ---------- */
     restoreQueue();
 
     (function restore() {
-        var data = null;
-        try { data = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (e) {}
-        if (data && data.src) {
-            for (var i = 0; i < tracks.length; i++) {
-                // Compare against the absolute src the browser would resolve to.
-                var a = document.createElement('a');
-                a.href = tracks[i].getAttribute('data-src');
-                if (a.href === data.src) {
-                    var pos = queue.indexOf(i);
-                    if (pos === -1) { queue.push(i); pos = queue.length - 1; }
-                    queuePos = pos;
-                    loadTrack(i, false); // paused so autoplay policy doesn't block
-                    player.addEventListener('loadedmetadata', function seekOnce() {
-                        if (data.time && data.time < player.duration) player.currentTime = data.time;
-                        player.removeEventListener('loadedmetadata', seekOnce);
-                    });
-                    renderQueue();
-                    return;
-                }
+        var resume = null;
+        try { resume = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (e) {}
+        var d = currentDescriptor();
+        if (d) {
+            loadDescriptor(d, false); // paused so autoplay policy doesn't block
+            if (resume && resume.src === d.src && resume.time) {
+                player.addEventListener('loadedmetadata', function seekOnce() {
+                    if (resume.time < player.duration) player.currentTime = resume.time;
+                    player.removeEventListener('loadedmetadata', seekOnce);
+                });
             }
         }
-        // No resume match — still show the last queue position if we have one.
-        if (queuePos >= 0) loadTrack(queue[queuePos], false);
         renderQueue();
     })();
 })();

@@ -291,36 +291,71 @@ def header_html(file_name, mp3_files):
                 <h1 class="site-title"><span class="site-logo">{logo}</span> {name}</h1>
         """.format(logo=html.escape(config.site_logo), name=title)
 
+    add_folder_btn = ''
+    if mp3_files:
+        add_folder_btn = (
+            '<button id="addFolderButton" type="button" class="icon-btn" '
+            'title="Add this folder to the queue" aria-label="Add this folder to the queue">📁＋</button>'
+        )
+
     head += """
                 <div class="topbar-actions">
                     <input id="search" type="search" class="search-input" placeholder="Search tracks…" aria-label="Search tracks" autocomplete="off">
+                    {add_folder_btn}
                     <button id="layoutToggle" type="button" class="icon-btn" title="Toggle layout" aria-label="Toggle layout">☰</button>
                     <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
                 </div>
             </div>
-        </header>
+        </header>""".format(add_folder_btn=add_folder_btn) + """
         <main class="container">
             <ul id="audioFiles" class="track-list grid-view">
     """
     return head
 
 
+def resolve_folder_cover(folder_path, covers_dir):
+    """Return the best cover web URL for a folder, or None.
+
+    Resolution order:
+      1. A standalone cover image in this folder (or an art-only subfolder),
+         via :func:`find_folder_cover`.
+      2. Embedded art from the first audio track directly in this folder.
+      3. Recurse into the first (sorted) subfolder that contains audio, so a
+         folder holding only subfolders inherits art from the first one — even
+         when it lives several levels deep.
+    """
+    cover_url = _save_cover_file(find_folder_cover(folder_path), covers_dir)
+    if cover_url:
+        return cover_url
+
+    mp3_files = get_mp3_files(folder_path)
+    if mp3_files:
+        first = mp3_files[0]
+        meta = extract_metadata(os.path.join(folder_path, first), first, covers_dir, None)
+        if meta['cover_url']:
+            return meta['cover_url']
+
+    for sub in get_folders(folder_path):  # sorted, already filtered to audio-bearing
+        cover_url = resolve_folder_cover(os.path.join(folder_path, sub), covers_dir)
+        if cover_url:
+            return cover_url
+    return None
+
+
 def folder_card_meta(folder_path, covers_dir):
     """Return (cover_url, artist) for a folder's album-style card.
 
-    Cover reuses :func:`find_folder_cover`; artist is taken from the first
-    audio track directly in the folder (blank when there is none).
+    Cover reuses :func:`resolve_folder_cover` (which descends into subfolders
+    when needed); artist is taken from the first audio track directly in the
+    folder (blank when there is none).
     """
-    cover_url = _save_cover_file(find_folder_cover(folder_path), covers_dir)
+    cover_url = resolve_folder_cover(folder_path, covers_dir)
     artist = ''
     mp3_files = get_mp3_files(folder_path)
     if mp3_files:
         first = mp3_files[0]
         meta = extract_metadata(os.path.join(folder_path, first), first, covers_dir, cover_url)
         artist = meta['artist']
-        # Fall back to the first track's embedded art when no standalone cover exists.
-        if not cover_url:
-            cover_url = meta['cover_url']
     return cover_url, artist
 
 
@@ -455,6 +490,17 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
             </div>
             <ul id="queueList" class="queue-list"></ul>
         </aside>
+        <div id="queueDialogBackdrop" class="modal-backdrop" hidden></div>
+        <div id="queueDialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="queueDialogTitle" hidden>
+            <p id="queueDialogTitle" class="modal-title">A queue is already playing</p>
+            <p class="modal-text">Keep the current queue, or replace it?</p>
+            <div class="modal-actions">
+                <button id="qdAddSong" class="modal-btn">Keep queue · add this song</button>
+                <button id="qdAddFolder" class="modal-btn">Keep queue · add whole folder</button>
+                <button id="qdReplace" class="modal-btn">Replace queue with this folder</button>
+                <button id="qdCancel" class="modal-btn modal-btn-ghost">Cancel</button>
+            </div>
+        </div>
         """
 
     footer += """

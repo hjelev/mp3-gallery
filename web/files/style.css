@@ -515,6 +515,47 @@ body {
     display: none; /* desktop keeps the page interactive; shown on mobile only */
 }
 
+/* ---- Modal dialog (queue choice) ---- */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.5);
+}
+.modal-backdrop[hidden] { display: none; }
+.modal {
+    position: fixed;
+    z-index: 51;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 380px;
+    max-width: 90vw;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+}
+.modal[hidden] { display: none; }
+.modal-title { font-weight: 700; font-size: 1.05rem; margin: 0 0 6px; }
+.modal-text { color: var(--muted); font-size: 0.9rem; margin: 0 0 16px; }
+.modal-actions { display: flex; flex-direction: column; gap: 8px; }
+.modal-btn {
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.92rem;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.modal-btn:hover { background: var(--row-hover); border-color: var(--accent); }
+.modal-btn-ghost { background: transparent; color: var(--muted); text-align: center; }
+.modal-btn-ghost:hover { color: var(--accent); }
+
 /* ---- Responsive ---- */
 @media (max-width: 720px) {
     .search-input { width: 130px; }
