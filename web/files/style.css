@@ -129,6 +129,7 @@ body {
     transition: background 0.15s ease, transform 0.05s ease, color 0.15s ease;
     flex: 0 0 auto;
 }
+.icon-btn svg { display: block; }
 .icon-btn:hover { background: var(--row-hover); }
 .icon-btn:active { transform: scale(0.94); }
 .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }

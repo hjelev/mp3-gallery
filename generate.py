@@ -295,7 +295,15 @@ def header_html(file_name, mp3_files):
     if mp3_files:
         add_folder_btn = (
             '<button id="addFolderButton" type="button" class="icon-btn" '
-            'title="Add this folder to the queue" aria-label="Add this folder to the queue">📁＋</button>'
+            'title="Add this folder to the queue" aria-label="Add this folder to the queue">'
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            'aria-hidden="true">'
+            '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3"/>'
+            '<path d="M3 7v10a2 2 0 0 0 2 2h7"/>'
+            '<line x1="18" y1="14" x2="18" y2="20"/>'
+            '<line x1="15" y1="17" x2="21" y2="17"/>'
+            '</svg></button>'
         )
 
     head += """
