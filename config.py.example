@@ -1,8 +1,17 @@
-# Directory containing the MP3 files
+# Directory containing the MP3 files (read locally to scan + extract metadata)
 local_path = '/home/masoko/git/mp3-web-list/web/mp3'
 
-#path to store generated html file
+# Path to store the generated html files (e.g. the web root you serve)
 html_folder = '/home/masoko/git/mp3-web-list/web'
 
-# External path to the MP3 files
+# External path/URL the browser uses to fetch the MP3 files
 public_path = "http://127.0.0.1:5500/mp3-web-list/web/mp3/"
+
+# Title shown in the browser tab and the page header
+site_name = 'MP3 Gallery'
+
+# Logo/emoji shown before the site name in the header
+site_logo = '🎵'
+
+# Icon/text used for the per-track download link
+download_icon = '⬇'
