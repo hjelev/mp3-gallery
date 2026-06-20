@@ -26,6 +26,9 @@ _MIME_EXT = {
     'image/webp': 'webp',
 }
 
+# Standalone cover image extensions, in preference order.
+_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
+
 
 def count_mp3_files(path):
     return len(glob.glob(os.path.join(glob.escape(path), '**', '*.mp3'), recursive=True))
@@ -70,6 +73,68 @@ def _save_cover(data, mime, local_file_path, covers_dir):
     return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
 
 
+def _save_cover_file(src_path, covers_dir):
+    """Copy a standalone image file into covers_dir, return its web path or None."""
+    if not src_path:
+        return None
+    ext = os.path.splitext(src_path)[1].lstrip('.').lower() or 'jpg'
+    digest = hashlib.sha1(os.path.abspath(src_path).encode('utf-8')).hexdigest()[:16]
+    fname = f'{digest}.{ext}'
+    dest = os.path.join(covers_dir, fname)
+    if not os.path.exists(dest):
+        try:
+            with open(src_path, 'rb') as src, open(dest, 'wb') as fh:
+                fh.write(src.read())
+        except OSError:
+            return None
+    return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
+
+
+def find_folder_cover(local_path):
+    """Return the abs path to the best standalone cover image in this folder, or None.
+
+    Only known cover-style filenames are considered so that incidental images
+    (back/inside/booklet/spectrum scans) are never picked.
+    """
+    try:
+        entries = [f for f in os.listdir(local_path)
+                   if os.path.isfile(os.path.join(local_path, f))]
+    except OSError:
+        return None
+
+    # Index images by (lowercase stem, lowercase ext) for quick lookup.
+    images = []
+    for name in entries:
+        stem, ext = os.path.splitext(name)
+        ext = ext.lstrip('.').lower()
+        if ext in _IMAGE_EXTS:
+            images.append((stem.lower(), ext, name))
+
+    if not images:
+        return None
+
+    folder_stem = os.path.basename(os.path.normpath(local_path)).lower()
+
+    # Predicates in priority order; first matching group wins.
+    matchers = [
+        lambda s: s == 'cover',
+        lambda s: s == 'folder',
+        lambda s: s == 'front',
+        lambda s: s.startswith('albumart') and 'large' in s,
+        lambda s: s.startswith('albumart'),
+        lambda s: s == 'album',
+        lambda s: s == folder_stem,
+    ]
+
+    for matches in matchers:
+        candidates = [img for img in images if matches(img[0])]
+        if candidates:
+            # Tie-break by extension preference order.
+            candidates.sort(key=lambda img: _IMAGE_EXTS.index(img[1]))
+            return os.path.join(local_path, candidates[0][2])
+    return None
+
+
 def _extract_cover(audio, local_file_path, covers_dir):
     # ID3 (mp3) embedded art lives in APIC frames.
     try:
@@ -92,14 +157,18 @@ def _extract_cover(audio, local_file_path, covers_dir):
     return None
 
 
-def extract_metadata(local_file_path, filename, covers_dir):
-    """Return a dict of display metadata, degrading gracefully to filename-only."""
+def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=None):
+    """Return a dict of display metadata, degrading gracefully to filename-only.
+
+    A standalone folder cover (``folder_cover_url``) takes priority over embedded
+    ID3 art; embedded art is only extracted when no folder cover exists.
+    """
     meta = {
         'title': clean_title_from_filename(filename),
         'artist': '',
         'album': '',
         'duration': '',
-        'cover_url': None,
+        'cover_url': folder_cover_url,
     }
     if MutagenFile is None:
         return meta
@@ -128,7 +197,10 @@ def extract_metadata(local_file_path, filename, covers_dir):
             meta['title'] = title
         meta['artist'] = artist
         meta['album'] = album
-        meta['cover_url'] = _extract_cover(audio, local_file_path, covers_dir)
+        if folder_cover_url:
+            meta['cover_url'] = folder_cover_url
+        else:
+            meta['cover_url'] = _extract_cover(audio, local_file_path, covers_dir)
     except Exception:
         # Corrupt/odd file: keep the filename-derived defaults.
         pass
@@ -192,12 +264,12 @@ def generate_folders_html(folders):
     return folders_html
 
 
-def generate_mp3_html(public_path, mp3_files, local_path, covers_dir):
+def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url=None):
     mp3_html = ''
     for index, mp3_file in enumerate(mp3_files, start=1):
         mp3_public_path = os.path.join(public_path, mp3_file)
         local_file_path = os.path.join(local_path, mp3_file)
-        meta = extract_metadata(local_file_path, mp3_file, covers_dir)
+        meta = extract_metadata(local_file_path, mp3_file, covers_dir, folder_cover_url)
 
         title = html.escape(meta['title'])
         artist = html.escape(meta['artist'])
@@ -304,10 +376,11 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     total_mp3_count = count_mp3_files(local_path)
     folders = get_folders(local_path)
     mp3_files = get_mp3_files(local_path)
+    folder_cover_url = _save_cover_file(find_folder_cover(local_path), covers_dir)
 
     page = header_html(file_name, mp3_files)
     page += generate_folders_html(folders)
-    page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir)
+    page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url)
     page += footer_html(file_name, mp3_files, folders, total_mp3_count)
     save_html(page, html_folder, file_name)
 
