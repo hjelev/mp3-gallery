@@ -604,6 +604,21 @@
         queuePos = (typeof data.pos === 'number' && data.pos >= 0 && data.pos < queue.length) ? data.pos : -1;
     }
 
+    // Resume playback on the first user gesture when the browser's autoplay
+    // policy blocked an automatic play() (common right after a page reload).
+    function resumeOnGesture() {
+        function go() {
+            document.removeEventListener('pointerdown', go);
+            document.removeEventListener('keydown', go);
+            document.removeEventListener('touchstart', go);
+            var p = player.play();
+            if (p && p.catch) p.catch(function () {});
+        }
+        document.addEventListener('pointerdown', go);
+        document.addEventListener('keydown', go);
+        document.addEventListener('touchstart', go);
+    }
+
     /* ---------- Init: restore queue, then resume the last track ---------- */
     restoreQueue();
 
@@ -621,12 +636,13 @@
                     if (resume.time && resume.time < player.duration) {
                         player.currentTime = resume.time;
                     }
-                    // Keep playing across navigation. May be blocked by the browser's
-                    // autoplay policy on a fresh page; the catch leaves it paused but
-                    // loaded and correctly positioned.
+                    // Keep playing across navigation. The browser's autoplay policy
+                    // often blocks this on a fresh page (e.g. after a reload); when
+                    // it does, arm a one-time listener so playback resumes the moment
+                    // the user clicks/taps/presses a key anywhere on the page.
                     if (resume.playing) {
                         var p = player.play();
-                        if (p && p.catch) p.catch(function () {});
+                        if (p && p.catch) p.catch(function () { resumeOnGesture(); });
                     }
                 });
             }
