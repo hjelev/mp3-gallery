@@ -6,6 +6,7 @@
     var LAYOUT_KEY = 'mp3gallery:layout';
     var RESUME_KEY = 'mp3gallery:resume';
     var QUEUE_KEY = 'mp3gallery:queue';
+    var VOLUME_KEY = 'mp3gallery:volume';
 
     /* ---------- Theme (runs immediately so there's no flash) ---------- */
     var root = document.documentElement;
@@ -516,9 +517,20 @@
         if (pbDuration) pbDuration.textContent = fmt(player.duration);
     });
 
+    // Paint the accent-filled portion of a range input up to its thumb. CSS reads
+    // the --fill custom property for the track gradient (no pure-CSS equivalent).
+    function setFill(el) {
+        if (!el) return;
+        var min = parseFloat(el.min) || 0;
+        var max = parseFloat(el.max) || 100;
+        var pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
+        el.style.setProperty('--fill', pct + '%');
+    }
+
     player.addEventListener('timeupdate', function () {
         if (!seeking && seek) {
             seek.value = player.duration ? (player.currentTime / player.duration) * 100 : 0;
+            setFill(seek);
         }
         if (pbCurrent) pbCurrent.textContent = fmt(player.currentTime);
         saveResume();
@@ -535,7 +547,8 @@
     });
 
     if (seek) {
-        seek.addEventListener('input', function () { seeking = true; });
+        setFill(seek);
+        seek.addEventListener('input', function () { seeking = true; setFill(seek); });
         seek.addEventListener('change', function () {
             if (player.duration) player.currentTime = (seek.value / 100) * player.duration;
             seeking = false;
@@ -543,7 +556,18 @@
     }
 
     if (volume) {
-        volume.addEventListener('input', function () { player.volume = parseFloat(volume.value); });
+        var savedVolume = null;
+        try { savedVolume = localStorage.getItem(VOLUME_KEY); } catch (e) {}
+        if (savedVolume !== null && savedVolume !== '') {
+            volume.value = savedVolume;
+            player.volume = parseFloat(savedVolume);
+        }
+        setFill(volume);
+        volume.addEventListener('input', function () {
+            player.volume = parseFloat(volume.value);
+            setFill(volume);
+            try { localStorage.setItem(VOLUME_KEY, volume.value); } catch (e) {}
+        });
     }
 
     /* ---------- Persistence ---------- */
