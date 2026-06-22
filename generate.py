@@ -493,9 +493,8 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
         </footer>
     """.format(stats=stats_html)
 
-    if len(mp3_files) > 0:
-        footer += """
-        <div id="playerBar" class="player-bar" hidden>
+    footer += """
+        <div id="playerBar" class="player-bar">
             <audio id="player" preload="metadata"></audio>
             <div class="pb-now">
                 <span class="pb-cover"><img id="pbCover" src="" alt=""></span>
@@ -557,7 +556,11 @@ def save_html(html_text, html_folder, file_name='index.html'):
         f.write(html_text)
 
 
-def process_collection(local_path, public_path, html_folder, file_name, covers_dir):
+def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None):
+    if generated is None:
+        generated = set()
+    generated.add(file_name)
+
     total_mp3_count = count_mp3_files(local_path)
     folders = get_folders(local_path)
     mp3_files = get_mp3_files(local_path)
@@ -572,10 +575,34 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     for folder in folders:
         folder_path = os.path.join(local_path, folder)
         folder_public_path = os.path.join(public_path, folder)
-        process_collection(folder_path, folder_public_path, html_folder, folder + '.html', covers_dir)
+        process_collection(folder_path, folder_public_path, html_folder, folder + '.html', covers_dir, generated)
+
+    return generated
+
+
+def prune_orphaned_html(html_folder, generated):
+    """Delete top-level .html files in html_folder that this run didn't write.
+
+    Folders renamed or removed from the source leave stale pages behind (each
+    folder maps to ``<folder>.html``); without this they'd accumulate forever.
+    Only the flat html files written by :func:`save_html` are considered, so the
+    ``files/`` assets and cover images are untouched.
+    """
+    removed = []
+    for name in os.listdir(html_folder):
+        if not name.endswith('.html') or name in generated:
+            continue
+        path = os.path.join(html_folder, name)
+        if os.path.isfile(path):
+            os.remove(path)
+            removed.append(name)
+    return removed
 
 
 if __name__ == '__main__':
     covers_dir = os.path.join(config.html_folder, COVERS_SUBDIR)
     os.makedirs(covers_dir, exist_ok=True)
-    process_collection(config.local_path, config.public_path, config.html_folder, 'index.html', covers_dir)
+    generated = process_collection(config.local_path, config.public_path, config.html_folder, 'index.html', covers_dir)
+    removed = prune_orphaned_html(config.html_folder, generated)
+    if removed:
+        print(f'Removed {len(removed)} orphaned HTML file(s): ' + ', '.join(sorted(removed)))

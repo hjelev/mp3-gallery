@@ -85,7 +85,9 @@
     /* ---------- Player ---------- */
     var tracks = Array.prototype.slice.call(document.querySelectorAll('.track'));
     var player = document.getElementById('player');
-    if (!tracks.length || !player) return; // folder-only page
+    if (!player) return; // no player bar on this page
+    // Note: `tracks` may be empty on folder-only pages. The player still
+    // initialises so the bar stays visible and a restored queue keeps playing.
 
     var bar = document.getElementById('playerBar');
     var playBtn = document.getElementById('playButton');
@@ -503,7 +505,18 @@
     }
 
     player.addEventListener('play', function () { if (playBtn) playBtn.textContent = '⏸'; });
-    player.addEventListener('pause', function () { if (playBtn) playBtn.textContent = '▶'; });
+    player.addEventListener('pause', function () {
+        if (playBtn) playBtn.textContent = '▶';
+        saveResume(true);
+    });
+
+    // Capture the exact position/playing state before the page goes away, so the
+    // next page can resume from the right spot (timeupdate only fires ~4x/sec
+    // and is throttled, so it can lag a navigation by a few seconds).
+    window.addEventListener('pagehide', function () { saveResume(true); });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') saveResume(true);
+    });
 
     player.addEventListener('loadedmetadata', function () {
         if (pbDuration) pbDuration.textContent = fmt(player.duration);
@@ -541,16 +554,23 @@
 
     /* ---------- Persistence ---------- */
     var lastSave = 0;
-    function saveResume() {
-        var now = Date.now();
-        if (now - lastSave < 3000) return;
-        lastSave = now;
+    function writeResume() {
+        if (!player.src) return;
         try {
             localStorage.setItem(RESUME_KEY, JSON.stringify({
                 src: player.src,
-                time: player.currentTime
+                time: player.currentTime,
+                playing: !player.paused
             }));
         } catch (e) {}
+    }
+    // Throttled during playback; force=true bypasses the throttle so we capture
+    // the exact position on pause and right before navigating away.
+    function saveResume(force) {
+        var now = Date.now();
+        if (!force && now - lastSave < 3000) return;
+        lastSave = now;
+        writeResume();
     }
 
     function saveQueue() {
@@ -592,13 +612,27 @@
         try { resume = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (e) {}
         var d = currentDescriptor();
         if (d) {
-            loadDescriptor(d, false); // paused so autoplay policy doesn't block
-            if (resume && resume.src === d.src && resume.time) {
+            loadDescriptor(d, false); // load paused; we seek then (auto)play below
+            if (resume && resume.src === d.src) {
                 player.addEventListener('loadedmetadata', function seekOnce() {
-                    if (resume.time < player.duration) player.currentTime = resume.time;
                     player.removeEventListener('loadedmetadata', seekOnce);
+                    // Seek first so playback continues from the saved spot with no
+                    // audible blip from 0:00.
+                    if (resume.time && resume.time < player.duration) {
+                        player.currentTime = resume.time;
+                    }
+                    // Keep playing across navigation. May be blocked by the browser's
+                    // autoplay policy on a fresh page; the catch leaves it paused but
+                    // loaded and correctly positioned.
+                    if (resume.playing) {
+                        var p = player.play();
+                        if (p && p.catch) p.catch(function () {});
+                    }
                 });
             }
+        } else {
+            // Empty state: nothing to play yet, so hide the placeholder cover.
+            if (pbCover) pbCover.style.visibility = 'hidden';
         }
         renderQueue();
     })();
