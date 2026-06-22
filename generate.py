@@ -4,6 +4,7 @@ import os
 import glob
 import hashlib
 import html
+import re
 from urllib.parse import quote
 
 
@@ -85,6 +86,34 @@ def clean_title_from_filename(filename):
     name = os.path.splitext(filename)[0]
     name = name.replace('_', ' ').replace('-', ' ')
     return ' '.join(name.split()).strip() or filename
+
+
+def slugify(name):
+    """Turn a folder name into a clean, URL-friendly slug.
+
+    Lowercases, replaces every run of non-alphanumeric characters (spaces,
+    punctuation, etc.) with a single ``-``, and trims leading/trailing dashes so
+    the resulting ``.html`` filenames don't need ugly percent-encoding.
+    """
+    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    return slug or 'untitled'
+
+
+def reserve_html_name(slug, generated):
+    """Return a unique ``<slug>.html`` name and record it in ``generated``.
+
+    Pages are written flat in one folder, so distinct source folders can slug to
+    the same name (e.g. ``Album 1`` and ``Album-1``, or same-named folders under
+    different parents). Collisions get a ``-2``, ``-3``, … suffix; ``index.html``
+    is reserved for the root page.
+    """
+    i = 2
+    name = f'{slug}.html'
+    while name in generated or name == 'index.html':
+        name = f'{slug}-{i}.html'
+        i += 1
+    generated.add(name)
+    return name
 
 
 def format_duration(seconds):
@@ -295,7 +324,7 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
     return meta
 
 
-def header_html(file_name, mp3_files, parent_file_name=None):
+def header_html(file_name, mp3_files, parent_file_name=None, display_name=None):
     title = html.escape(config.site_name)
     head = """
     <!DOCTYPE html>
@@ -319,7 +348,8 @@ def header_html(file_name, mp3_files, parent_file_name=None):
                 <a id="backButton" href="{href}" class="icon-btn" title="Back" aria-label="Back">‹</a>
                 <h1 class="site-title"><span class="folder-glyph">📁</span> {name}</h1>
         """.format(href=url_path(parent_file_name or 'index.html'),
-                   name=html.escape(file_name.replace('.html', '')))
+                   name=html.escape(display_name if display_name is not None
+                                    else file_name.replace('.html', '')))
     else:
         head += """
                 <h1 class="site-title"><span class="site-logo">{logo}</span> {name}</h1>
@@ -401,7 +431,7 @@ def folder_card_meta(folder_path, covers_dir):
     return cover_url, artist
 
 
-def generate_folders_html(folders, local_path, covers_dir):
+def generate_folders_html(folders, local_path, covers_dir, folder_files):
     folders_html = ''
     for folder in folders:
         safe = html.escape(folder)
@@ -413,7 +443,7 @@ def generate_folders_html(folders, local_path, covers_dir):
             cover_html = '<span class="cover-fallback">📁</span>'
         folders_html += (
             f'<li class="folder-row" data-title="{safe}" data-artist="{artist_safe}">'
-            f'<a href="{url_path(folder + ".html")}">'
+            f'<a href="{url_path(folder_files[folder])}">'
             f'<span class="folder-cover">{cover_html}</span>'
             '<span class="folder-meta">'
             f'<span class="folder-name">{safe}</span>'
@@ -557,7 +587,7 @@ def save_html(html_text, html_folder, file_name='index.html'):
         f.write(html_text)
 
 
-def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None, parent_file_name=None):
+def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None, parent_file_name=None, display_name=None):
     if generated is None:
         generated = set()
     generated.add(file_name)
@@ -567,8 +597,12 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     mp3_files = get_mp3_files(local_path)
     folder_cover_url = _save_cover_file(find_folder_cover(local_path), covers_dir)
 
-    page = header_html(file_name, mp3_files, parent_file_name)
-    page += generate_folders_html(folders, local_path, covers_dir)
+    # Reserve a unique slugified page name per child folder up front, so the
+    # folder-card links and the recursive page writes agree on the filename.
+    folder_files = {f: reserve_html_name(slugify(f), generated) for f in folders}
+
+    page = header_html(file_name, mp3_files, parent_file_name, display_name)
+    page += generate_folders_html(folders, local_path, covers_dir, folder_files)
     page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url)
     page += footer_html(file_name, mp3_files, folders, total_mp3_count)
     save_html(page, html_folder, file_name)
@@ -576,7 +610,7 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     for folder in folders:
         folder_path = os.path.join(local_path, folder)
         folder_public_path = os.path.join(public_path, folder)
-        process_collection(folder_path, folder_public_path, html_folder, folder + '.html', covers_dir, generated, parent_file_name=file_name)
+        process_collection(folder_path, folder_public_path, html_folder, folder_files[folder], covers_dir, generated, parent_file_name=file_name, display_name=folder)
 
     return generated
 
