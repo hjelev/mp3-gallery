@@ -55,12 +55,6 @@
         });
     }
 
-    /* ---------- Back button ---------- */
-    var backButton = document.getElementById('backButton');
-    if (backButton) {
-        backButton.addEventListener('click', function () { window.history.back(); });
-    }
-
     /* ---------- Search (works even with no tracks) ---------- */
     var search = document.getElementById('search');
     var rows = Array.prototype.slice.call(document.querySelectorAll('.track, .folder-row'));

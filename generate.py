@@ -295,7 +295,7 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
     return meta
 
 
-def header_html(file_name, mp3_files):
+def header_html(file_name, mp3_files, parent_file_name=None):
     title = html.escape(config.site_name)
     head = """
     <!DOCTYPE html>
@@ -316,9 +316,10 @@ def header_html(file_name, mp3_files):
 
     if file_name != 'index.html':
         head += """
-                <button id="backButton" type="button" class="icon-btn" title="Back" aria-label="Back">‹</button>
+                <a id="backButton" href="{href}" class="icon-btn" title="Back" aria-label="Back">‹</a>
                 <h1 class="site-title"><span class="folder-glyph">📁</span> {name}</h1>
-        """.format(name=html.escape(file_name.replace('.html', '')))
+        """.format(href=url_path(parent_file_name or 'index.html'),
+                   name=html.escape(file_name.replace('.html', '')))
     else:
         head += """
                 <h1 class="site-title"><span class="site-logo">{logo}</span> {name}</h1>
@@ -556,7 +557,7 @@ def save_html(html_text, html_folder, file_name='index.html'):
         f.write(html_text)
 
 
-def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None):
+def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None, parent_file_name=None):
     if generated is None:
         generated = set()
     generated.add(file_name)
@@ -566,7 +567,7 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     mp3_files = get_mp3_files(local_path)
     folder_cover_url = _save_cover_file(find_folder_cover(local_path), covers_dir)
 
-    page = header_html(file_name, mp3_files)
+    page = header_html(file_name, mp3_files, parent_file_name)
     page += generate_folders_html(folders, local_path, covers_dir)
     page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url)
     page += footer_html(file_name, mp3_files, folders, total_mp3_count)
@@ -575,7 +576,7 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
     for folder in folders:
         folder_path = os.path.join(local_path, folder)
         folder_public_path = os.path.join(public_path, folder)
-        process_collection(folder_path, folder_public_path, html_folder, folder + '.html', covers_dir, generated)
+        process_collection(folder_path, folder_public_path, html_folder, folder + '.html', covers_dir, generated, parent_file_name=file_name)
 
     return generated
 

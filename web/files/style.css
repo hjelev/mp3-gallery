@@ -126,6 +126,7 @@ body {
     border-radius: 50%;
     font-size: 1rem;
     cursor: pointer;
+    text-decoration: none;
     transition: background 0.15s ease, transform 0.05s ease, color 0.15s ease;
     flex: 0 0 auto;
 }
