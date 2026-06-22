@@ -37,7 +37,17 @@ _MIME_EXT = {
 _IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 
 # Audio file extensions to include (lowercase, matched case-insensitively).
-AUDIO_EXTS = ('.mp3', '.flac')
+# Limited to formats an HTML5 <audio> element can actually play in modern
+# browsers, so every listed track is playable rather than a broken link.
+AUDIO_EXTS = (
+    '.mp3',                              # MPEG audio
+    '.m4a', '.m4b', '.aac',             # AAC / ALAC (MP4 container, audiobooks, raw ADTS)
+    '.flac',                             # FLAC
+    '.ogg', '.oga', '.opus',            # Ogg Vorbis / Opus
+    '.wav', '.wave',                     # PCM WAVE
+    '.aiff', '.aif', '.aifc',           # AIFF
+    '.webm', '.weba',                    # WebM / Matroska audio
+)
 
 
 def count_mp3_files(path):
@@ -201,12 +211,35 @@ def _extract_cover(audio, local_file_path, covers_dir):
                     return _save_cover(apic.data, apic.mime, local_file_path, covers_dir)
     except Exception:
         pass
-    # Generic fallback (some formats expose `pictures`).
+    # MP4/M4A embedded art lives in the `covr` atom (list of MP4Cover bytes).
+    try:
+        if tags is not None and 'covr' in tags:
+            covers = tags['covr']
+            if covers:
+                cover = covers[0]
+                fmt = getattr(cover, 'imageformat', None)
+                mime = 'image/png' if fmt == getattr(cover, 'FORMAT_PNG', object()) else 'image/jpeg'
+                return _save_cover(bytes(cover), mime, local_file_path, covers_dir)
+    except Exception:
+        pass
+    # FLAC (and some others) expose parsed picture blocks directly.
     try:
         pictures = getattr(audio, 'pictures', None)
         if pictures:
             pic = pictures[0]
             return _save_cover(pic.data, pic.mime, local_file_path, covers_dir)
+    except Exception:
+        pass
+    # Ogg Vorbis/Opus store art as a base64 FLAC Picture in a Vorbis comment.
+    try:
+        if tags is not None:
+            import base64
+            from mutagen.flac import Picture
+            for key in ('metadata_block_picture', 'METADATA_BLOCK_PICTURE'):
+                values = tags.get(key)
+                if values:
+                    pic = Picture(base64.b64decode(values[0]))
+                    return _save_cover(pic.data, pic.mime, local_file_path, covers_dir)
     except Exception:
         pass
     return None
@@ -245,9 +278,9 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
                 value = value[0]
             return str(value).strip()
 
-        title = first('TIT2') or first('title')
-        artist = first('TPE1') or first('artist')
-        album = first('TALB') or first('album')
+        title = first('TIT2') or first('title') or first('\xa9nam')
+        artist = first('TPE1') or first('artist') or first('\xa9ART')
+        album = first('TALB') or first('album') or first('\xa9alb')
         if title:
             meta['title'] = title
         meta['artist'] = artist
