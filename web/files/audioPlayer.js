@@ -625,10 +625,18 @@
     // Resume playback on the first user gesture when the browser's autoplay
     // policy blocked an automatic play() (common right after a page reload).
     function resumeOnGesture() {
-        function go() {
+        function go(e) {
             document.removeEventListener('pointerdown', go);
             document.removeEventListener('keydown', go);
             document.removeEventListener('touchstart', go);
+            // If the first gesture is itself a playback control (play button or
+            // a track row), let that control's own handler start playback. The
+            // gesture fires before the control's click event, so playing here
+            // would make the handler's toggle pause it instead.
+            if (e && e.target && e.target.closest &&
+                e.target.closest('#playButton, .track, #prevButton, #nextButton')) {
+                return;
+            }
             var p = player.play();
             if (p && p.catch) p.catch(function () {});
         }
