@@ -151,6 +151,12 @@ def format_duration(seconds):
     return f'{minutes}:{secs:02d}'
 
 
+def _thumb_path(dest_path):
+    """Path of the downsized ``<name>_cover_art<ext>`` sibling for a cover."""
+    base, ext = os.path.splitext(dest_path)
+    return f'{base}_cover_art{ext}'
+
+
 def _make_thumbnail(dest_path):
     """Create a downsized ``<name>_cover_art<ext>`` sibling of a saved cover.
 
@@ -160,7 +166,7 @@ def _make_thumbnail(dest_path):
     left untouched (not regenerated).
     """
     base, ext = os.path.splitext(dest_path)
-    thumb_path = f'{base}_cover_art{ext}'
+    thumb_path = _thumb_path(dest_path)
     if os.path.exists(thumb_path):
         return os.path.basename(thumb_path)
     if Image is None:
@@ -178,13 +184,24 @@ def _make_thumbnail(dest_path):
 
 def _cover_web_path(dest):
     """Web path for a saved cover ``dest``. When ``generate_thumbnails`` is
-    enabled, generate (once) and prefer a downsized ``_cover_art`` thumbnail."""
+    enabled, generate (once) a downsized ``_cover_art`` thumbnail, drop the
+    full-size original, and publish only the thumbnail."""
     fname = os.path.basename(dest)
     if getattr(config, 'generate_thumbnails', False):
         thumb = _make_thumbnail(dest)
-        if thumb:
+        if thumb and thumb != fname:
             fname = thumb
+            # The full-size original is only needed as a thumbnail source.
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
     return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
+
+
+def _thumbnail_only():
+    """True when thumbnails are generated and full-size covers are not kept."""
+    return getattr(config, 'generate_thumbnails', False) and Image is not None
 
 
 def _save_cover(data, mime, local_file_path, covers_dir):
@@ -193,6 +210,10 @@ def _save_cover(data, mime, local_file_path, covers_dir):
     digest = hashlib.sha1(os.path.abspath(local_file_path).encode('utf-8')).hexdigest()[:16]
     fname = f'{digest}.{ext}'
     dest = os.path.join(covers_dir, fname)
+    # If only the thumbnail is published and it already exists, skip rewriting
+    # the full-size original (which would just be deleted again).
+    if _thumbnail_only() and os.path.exists(_thumb_path(dest)):
+        return _cover_web_path(dest)
     if not os.path.exists(dest):
         with open(dest, 'wb') as fh:
             fh.write(data)
@@ -207,6 +228,8 @@ def _save_cover_file(src_path, covers_dir):
     digest = hashlib.sha1(os.path.abspath(src_path).encode('utf-8')).hexdigest()[:16]
     fname = f'{digest}.{ext}'
     dest = os.path.join(covers_dir, fname)
+    if _thumbnail_only() and os.path.exists(_thumb_path(dest)):
+        return _cover_web_path(dest)
     if not os.path.exists(dest):
         try:
             with open(src_path, 'rb') as src, open(dest, 'wb') as fh:
