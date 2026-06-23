@@ -13,6 +13,15 @@ def url_path(path):
     spaces -> ``%20``), preserving ``/`` separators."""
     return html.escape(quote(path, safe='/'))
 
+
+def page_href(file_name):
+    """Href for an internal page link. The root page (``index.html``) links to
+    ``/`` so the home URL stays clean and the server auto-serves index.html;
+    other pages keep their (percent-encoded) filename."""
+    if file_name == 'index.html':
+        return '/'
+    return url_path(file_name)
+
 import config
 
 try:
@@ -347,7 +356,7 @@ def header_html(file_name, mp3_files, parent_file_name=None, display_name=None):
         head += """
                 <a id="backButton" href="{href}" class="icon-btn" title="Back" aria-label="Back">‹</a>
                 <h1 class="site-title"><span class="folder-glyph">📁</span> {name}</h1>
-        """.format(href=url_path(parent_file_name or 'index.html'),
+        """.format(href=page_href(parent_file_name or 'index.html'),
                    name=html.escape(display_name if display_name is not None
                                     else file_name.replace('.html', '')))
     else:
@@ -443,7 +452,7 @@ def generate_folders_html(folders, local_path, covers_dir, folder_files):
             cover_html = '<span class="cover-fallback">📁</span>'
         folders_html += (
             f'<li class="folder-row" data-title="{safe}" data-artist="{artist_safe}">'
-            f'<a href="{url_path(folder_files[folder])}">'
+            f'<a href="{page_href(folder_files[folder])}">'
             f'<span class="folder-cover">{cover_html}</span>'
             '<span class="folder-meta">'
             f'<span class="folder-name">{safe}</span>'
