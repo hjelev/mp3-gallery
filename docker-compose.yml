@@ -1,0 +1,29 @@
+services:
+  generator:
+    build: .
+    environment:
+      LOCAL_PATH: /mp3
+      HTML_FOLDER: /site
+      PUBLIC_PATH: ${PUBLIC_PATH:?set PUBLIC_PATH to the external URL serving your MP3s}
+      SITE_NAME: ${SITE_NAME:-MP3 Gallery}
+      SITE_LOGO: ${SITE_LOGO:-🎵}
+      DOWNLOAD_ICON: ${DOWNLOAD_ICON:-⬇}
+      GENERATE_THUMBNAILS: ${GENERATE_THUMBNAILS:-true}
+      REFRESH_INTERVAL: ${REFRESH_INTERVAL:-3600}
+    volumes:
+      - ${MP3_DIR:?set MP3_DIR to your MP3 collection path}:/mp3:ro
+      - site:/site
+    restart: unless-stopped
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "${PORT:-8080}:80"
+    volumes:
+      - site:/usr/share/nginx/html:ro
+    depends_on:
+      - generator
+    restart: unless-stopped
+
+volumes:
+  site:

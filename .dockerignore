@@ -1,0 +1,10 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+config.py
+.env
+web/mp3/
+web/files/covers/
+*.html
+README.md
