@@ -701,25 +701,14 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
     return mp3_html
 
 
-def footer_html(file_name, mp3_files, folders, total_mp3_count):
-    stats = []
-    if file_name == 'index.html':
-        stats.append(f'{total_mp3_count} audio files in {len(folders)} folders')
-    if len(mp3_files) > 0:
-        stats.append(f'{len(mp3_files)} audio files in this folder')
-    if len(folders) > 0 and file_name != 'index.html':
-        stats.append(f'{len(folders)} folders')
-    stats_html = ' · '.join(html.escape(s) for s in stats)
+def player_bar_html():
+    """The sticky player bar, queue panel and dialogs, plus the player script.
 
-    footer = """
-            </ul>
-        </main>
-        <footer class="footer">
-            <span class="muted">{stats}</span>
-        </footer>
-    """.format(stats=stats_html)
-
-    footer += """
+    Shared by every page (folder pages via :func:`footer_html` and the
+    statistics page) so the player stays present and ``audioPlayer.js`` can
+    restore the saved queue/resume position after navigating between pages.
+    """
+    return """
         <div id="playerBar" class="player-bar">
             <audio id="player" preload="metadata"></audio>
             <div class="pb-now">
@@ -767,10 +756,30 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
                 <button id="qdCancel" class="modal-btn modal-btn-ghost">Cancel</button>
             </div>
         </div>
-        """
-
-    footer += """
         <script src="files/audioPlayer.js"></script>
+    """
+
+
+def footer_html(file_name, mp3_files, folders, total_mp3_count):
+    stats = []
+    if file_name == 'index.html':
+        stats.append(f'{total_mp3_count} audio files in {len(folders)} folders')
+    if len(mp3_files) > 0:
+        stats.append(f'{len(mp3_files)} audio files in this folder')
+    if len(folders) > 0 and file_name != 'index.html':
+        stats.append(f'{len(folders)} folders')
+    stats_html = ' · '.join(html.escape(s) for s in stats)
+
+    footer = """
+            </ul>
+        </main>
+        <footer class="footer">
+            <span class="muted">{stats}</span>
+        </footer>
+    """.format(stats=stats_html)
+
+    footer += player_bar_html()
+    footer += """
     </body>
     </html>
     """
@@ -897,7 +906,7 @@ def statistics_page_html(stats):
         <footer class="footer">
             <span class="muted">{tracks:,} tracks · {format_filesize(stats['total_bytes'])}</span>
         </footer>
-        <script src="files/audioPlayer.js"></script>
+        {player_bar_html()}
     </body>
     </html>
     """
@@ -979,6 +988,10 @@ def prune_orphaned_html(html_folder, generated):
 
 
 if __name__ == '__main__':
+    if MutagenFile is None:
+        print('WARNING: mutagen is not installed — track metadata (artist, album, '
+              'duration, genre, year, bitrate) and the statistics page will be '
+              'empty. Install it with: pip install -r requirements.txt')
     covers_dir = os.path.join(config.html_folder, COVERS_SUBDIR)
     os.makedirs(covers_dir, exist_ok=True)
     stats = new_stats()
