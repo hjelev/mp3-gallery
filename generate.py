@@ -5,7 +5,9 @@ import glob
 import hashlib
 import html
 import re
+import time
 from collections import Counter
+from datetime import datetime
 from urllib.parse import quote
 
 
@@ -152,22 +154,16 @@ def format_duration(seconds):
     return f'{minutes}:{secs:02d}'
 
 
-def format_long_duration(seconds):
-    """Human-readable playtime for large totals, e.g. ``3 days, 4 hours, 12 min``."""
-    seconds = int(round(seconds or 0))
-    if seconds <= 0:
-        return '0 min'
-    days, rem = divmod(seconds, 86400)
-    hours, rem = divmod(rem, 3600)
-    minutes = rem // 60
-    parts = []
-    if days:
-        parts.append(f'{days} day' + ('s' if days != 1 else ''))
+def format_elapsed(seconds):
+    """Human-readable elapsed run time, e.g. ``3.2 s`` or ``1 min 05 s``."""
+    seconds = max(0.0, float(seconds or 0))
+    if seconds < 60:
+        return f'{seconds:.1f} s'
+    minutes, secs = divmod(int(round(seconds)), 60)
+    hours, minutes = divmod(minutes, 60)
     if hours:
-        parts.append(f'{hours} hour' + ('s' if hours != 1 else ''))
-    if minutes and not days:
-        parts.append(f'{minutes} min')
-    return ', '.join(parts) or '< 1 min'
+        return f'{hours} h {minutes:02d} min'
+    return f'{minutes} min {secs:02d} s'
 
 
 def format_filesize(num_bytes):
@@ -408,10 +404,6 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         'album': '',
         'duration': '',
         'cover_url': folder_cover_url,
-        'length': 0.0,
-        'genre': '',
-        'year': '',
-        'bitrate': 0,
     }
     if MutagenFile is None:
         return meta
@@ -420,10 +412,7 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         if audio is None:
             return meta
         if getattr(audio, 'info', None) is not None:
-            length = getattr(audio.info, 'length', 0) or 0
-            meta['length'] = float(length)
-            meta['duration'] = format_duration(length)
-            meta['bitrate'] = int(getattr(audio.info, 'bitrate', 0) or 0)
+            meta['duration'] = format_duration(getattr(audio.info, 'length', 0))
 
         def first(tag):
             try:
@@ -439,15 +428,10 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         title = first('TIT2') or first('title') or first('\xa9nam')
         artist = first('TPE1') or first('artist') or first('\xa9ART')
         album = first('TALB') or first('album') or first('\xa9alb')
-        genre = first('TCON') or first('genre') or first('\xa9gen')
-        year = first('TDRC') or first('date') or first('\xa9day') or first('TYER')
         if title:
             meta['title'] = title
         meta['artist'] = artist
         meta['album'] = album
-        meta['genre'] = genre
-        match = re.search(r'\d{4}', year)
-        meta['year'] = match.group(0) if match else ''
         if folder_cover_url:
             meta['cover_url'] = folder_cover_url
         else:
@@ -590,61 +574,31 @@ def generate_folders_html(folders, local_path, covers_dir, folder_files):
 
 
 def new_stats():
-    """Fresh accumulator for collection-wide statistics (see statistics_page_html)."""
+    """Fresh accumulator for collection-wide statistics (see statistics_page_html).
+
+    Only filesystem-derived facts are tracked, so the stats page is populated
+    even when MP3 tag metadata isn't available.
+    """
     return {
         'tracks': 0,
         'albums': 0,            # folders directly containing audio
-        'total_seconds': 0.0,
         'total_bytes': 0,
-        'artists': Counter(),
-        'genres': Counter(),
-        'decades': Counter(),
-        'formats': Counter(),
-        'bitrate_sum': 0,
-        'bitrate_n': 0,
-        'longest': None,        # (seconds, title)
-        'shortest': None,       # (seconds, title)
+        'formats': Counter(),   # by file extension
     }
 
 
-def accumulate_stats(stats, meta, local_file_path, filename):
-    """Fold one track's metadata into the running ``stats`` accumulator."""
+def accumulate_stats(stats, local_file_path, filename):
+    """Fold one track into the running ``stats`` accumulator (no tag reads)."""
     stats['tracks'] += 1
-
-    length = meta.get('length') or 0.0
-    stats['total_seconds'] += length
 
     try:
         stats['total_bytes'] += os.path.getsize(local_file_path)
     except OSError:
         pass
 
-    if meta.get('artist'):
-        stats['artists'][meta['artist']] += 1
-    if meta.get('genre'):
-        stats['genres'][meta['genre']] += 1
-    if meta.get('year'):
-        try:
-            decade = f"{int(meta['year']) // 10 * 10}s"
-            stats['decades'][decade] += 1
-        except ValueError:
-            pass
-
     ext = os.path.splitext(filename)[1].lstrip('.').lower()
     if ext:
         stats['formats'][ext] += 1
-
-    bitrate = meta.get('bitrate') or 0
-    if bitrate > 0:
-        stats['bitrate_sum'] += bitrate
-        stats['bitrate_n'] += 1
-
-    if length > 0:
-        title = meta.get('title') or filename
-        if stats['longest'] is None or length > stats['longest'][0]:
-            stats['longest'] = (length, title)
-        if stats['shortest'] is None or length < stats['shortest'][0]:
-            stats['shortest'] = (length, title)
 
 
 def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url=None, stats=None):
@@ -655,7 +609,7 @@ def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cov
         meta = extract_metadata(local_file_path, mp3_file, covers_dir, folder_cover_url)
 
         if stats is not None:
-            accumulate_stats(stats, meta, local_file_path, mp3_file)
+            accumulate_stats(stats, local_file_path, mp3_file)
 
         title = html.escape(meta['title'])
         artist = html.escape(meta['artist'])
@@ -817,63 +771,43 @@ def _bar_chart(counter, limit=10, value_fmt=None):
     return f'<div class="stat-bars">{rows}</div>'
 
 
-def statistics_page_html(stats):
+def statistics_page_html(stats, generated_at=None, elapsed_seconds=0):
     """Build the standalone Statistics page from a collected ``stats`` dict.
 
-    Reuses ``style.css`` and ``audioPlayer.js`` (theme toggle works; the player
-    block self-disables when there's no ``#player`` element on the page).
+    ``generated_at`` is a ``datetime`` for when the site was built and
+    ``elapsed_seconds`` how long the build took. Reuses ``style.css`` and
+    ``audioPlayer.js`` (theme toggle works; the player block self-disables when
+    there's no ``#player`` element on the page).
     """
     title = html.escape(config.site_name)
     logo = html.escape(config.site_logo)
 
     tracks = stats['tracks']
-    avg_len = stats['total_seconds'] / tracks if tracks else 0
-    avg_bitrate = (stats['bitrate_sum'] / stats['bitrate_n']) if stats['bitrate_n'] else 0
 
     cards = ''.join([
         _stat_card(f'{tracks:,}', 'Tracks'),
         _stat_card(f"{stats['albums']:,}", 'Albums'),
-        _stat_card(format_long_duration(stats['total_seconds']), 'Total playtime'),
         _stat_card(format_filesize(stats['total_bytes']), 'Total size'),
-        _stat_card(f"{len(stats['artists']):,}", 'Unique artists'),
-        _stat_card(f"{len(stats['genres']):,}", 'Genres'),
-        _stat_card(format_duration(avg_len) or '—', 'Avg track length'),
-        _stat_card(f'{round(avg_bitrate / 1000)} kbps' if avg_bitrate else '—', 'Avg bitrate'),
+        _stat_card(f"{len(stats['formats']):,}", 'Formats'),
     ])
 
-    def extreme(entry):
-        if not entry:
-            return '—'
-        seconds, name = entry
-        return f'{name} ({format_duration(seconds)})'
+    timestamp = generated_at.strftime('%Y-%m-%d %H:%M:%S') if generated_at else '—'
 
     sections = f"""
                 <section class="stat-section">
                     <div class="stat-grid">{cards}</div>
                 </section>
                 <section class="stat-section">
-                    <h2 class="stat-heading">Top artists</h2>
-                    {_bar_chart(stats['artists'], limit=10)}
-                </section>
-                <section class="stat-section">
-                    <h2 class="stat-heading">Top genres</h2>
-                    {_bar_chart(stats['genres'], limit=10)}
-                </section>
-                <section class="stat-section">
-                    <h2 class="stat-heading">Tracks by decade</h2>
-                    {_bar_chart(stats['decades'], limit=12)}
-                </section>
-                <section class="stat-section">
                     <h2 class="stat-heading">Formats</h2>
                     {_bar_chart(stats['formats'], limit=12)}
                 </section>
                 <section class="stat-section">
-                    <h2 class="stat-heading">Extremes</h2>
+                    <h2 class="stat-heading">Generated</h2>
                     <div class="stat-bars">
-                        <div class="bar-row"><span class="bar-label">Longest track</span>
-                            <span class="bar-extreme">{html.escape(extreme(stats['longest']))}</span></div>
-                        <div class="bar-row"><span class="bar-label">Shortest track</span>
-                            <span class="bar-extreme">{html.escape(extreme(stats['shortest']))}</span></div>
+                        <div class="bar-row"><span class="bar-label">Generated at</span>
+                            <span class="bar-extreme">{html.escape(timestamp)}</span></div>
+                        <div class="bar-row"><span class="bar-label">Generation time</span>
+                            <span class="bar-extreme">{html.escape(format_elapsed(elapsed_seconds))}</span></div>
                     </div>
                 </section>
     """
@@ -988,15 +922,13 @@ def prune_orphaned_html(html_folder, generated):
 
 
 if __name__ == '__main__':
-    if MutagenFile is None:
-        print('WARNING: mutagen is not installed — track metadata (artist, album, '
-              'duration, genre, year, bitrate) and the statistics page will be '
-              'empty. Install it with: pip install -r requirements.txt')
     covers_dir = os.path.join(config.html_folder, COVERS_SUBDIR)
     os.makedirs(covers_dir, exist_ok=True)
     stats = new_stats()
+    start = time.monotonic()
     generated = process_collection(config.local_path, config.public_path, config.html_folder, 'index.html', covers_dir, stats=stats)
-    save_html(statistics_page_html(stats), config.html_folder, 'statistics.html')
+    elapsed = time.monotonic() - start
+    save_html(statistics_page_html(stats, datetime.now(), elapsed), config.html_folder, 'statistics.html')
     removed = prune_orphaned_html(config.html_folder, generated)
     if removed:
         print(f'Removed {len(removed)} orphaned HTML file(s): ' + ', '.join(sorted(removed)))
