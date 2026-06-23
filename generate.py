@@ -55,6 +55,12 @@ _MIME_EXT = {
 # Standalone cover image extensions, in preference order.
 _IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 
+# Substrings that mark an image as a non-cover scan; never auto-picked as a
+# last-resort cover.
+_NON_COVER_HINTS = ('back', 'inside', 'booklet', 'spek', 'spectrum',
+                    'disc', 'cd', 'tray', 'matrix', 'inlay', 'sticker',
+                    'obi', 'rear')
+
 # Audio file extensions to include (lowercase, matched case-insensitively).
 # Limited to formats an HTML5 <audio> element can actually play in modern
 # browsers, so every listed track is playable rather than a broken link.
@@ -253,6 +259,14 @@ def _best_cover_in_dir(local_path):
             # Tie-break by extension preference order.
             candidates.sort(key=lambda img: _IMAGE_EXTS.index(img[1]))
             return os.path.join(local_path, candidates[0][2])
+
+    # Last resort: any image whose name isn't an obvious non-cover scan, so art
+    # is found regardless of how it's named.
+    leftovers = [img for img in images
+                 if not any(h in img[0] for h in _NON_COVER_HINTS)]
+    if leftovers:
+        leftovers.sort(key=lambda img: (_IMAGE_EXTS.index(img[1]), img[0]))
+        return os.path.join(local_path, leftovers[0][2])
     return None
 
 
