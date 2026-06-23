@@ -28,13 +28,6 @@ def page_href(file_name):
 import config
 
 try:
-    from mutagen import File as MutagenFile
-    from mutagen.id3 import ID3
-except ImportError:  # pragma: no cover - mutagen is a declared dependency
-    MutagenFile = None
-    ID3 = None
-
-try:
     from PIL import Image
 except ImportError:  # pragma: no cover - Pillow only needed for thumbnails
     Image = None
@@ -45,15 +38,6 @@ COVERS_SUBDIR = os.path.join('files', 'covers')
 # Longest-edge size (px) for generated cover thumbnails. Matches the largest
 # the cover ever renders (the grid "big image" view) scaled for HiDPI displays.
 THUMB_MAX_PX = 480
-
-# Map embedded picture mime types to file extensions.
-_MIME_EXT = {
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/png': 'png',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-}
 
 # Standalone cover image extensions, in preference order.
 _IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
@@ -143,17 +127,6 @@ def reserve_html_name(slug, generated):
     return name
 
 
-def format_duration(seconds):
-    if not seconds or seconds <= 0:
-        return ''
-    seconds = int(round(seconds))
-    minutes, secs = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f'{hours}:{minutes:02d}:{secs:02d}'
-    return f'{minutes}:{secs:02d}'
-
-
 def format_elapsed(seconds):
     """Human-readable elapsed run time, e.g. ``3.2 s`` or ``1 min 05 s``."""
     seconds = max(0.0, float(seconds or 0))
@@ -229,22 +202,6 @@ def _cover_web_path(dest):
 def _thumbnail_only():
     """True when thumbnails are generated and full-size covers are not kept."""
     return getattr(config, 'generate_thumbnails', False) and Image is not None
-
-
-def _save_cover(data, mime, local_file_path, covers_dir):
-    """Write embedded cover bytes to the covers dir, return relative web path or None."""
-    ext = _MIME_EXT.get((mime or '').lower(), 'jpg')
-    digest = hashlib.sha1(os.path.abspath(local_file_path).encode('utf-8')).hexdigest()[:16]
-    fname = f'{digest}.{ext}'
-    dest = os.path.join(covers_dir, fname)
-    # If only the thumbnail is published and it already exists, skip rewriting
-    # the full-size original (which would just be deleted again).
-    if _thumbnail_only() and os.path.exists(_thumb_path(dest)):
-        return _cover_web_path(dest)
-    if not os.path.exists(dest):
-        with open(dest, 'wb') as fh:
-            fh.write(data)
-    return _cover_web_path(dest)
 
 
 def _save_cover_file(src_path, covers_dir):
@@ -347,99 +304,21 @@ def find_folder_cover(local_path):
     return None
 
 
-def _extract_cover(audio, local_file_path, covers_dir):
-    # ID3 (mp3) embedded art lives in APIC frames.
-    try:
-        tags = getattr(audio, 'tags', None)
-        if tags is not None:
-            for key in tags.keys():
-                if key.startswith('APIC'):
-                    apic = tags[key]
-                    return _save_cover(apic.data, apic.mime, local_file_path, covers_dir)
-    except Exception:
-        pass
-    # MP4/M4A embedded art lives in the `covr` atom (list of MP4Cover bytes).
-    try:
-        if tags is not None and 'covr' in tags:
-            covers = tags['covr']
-            if covers:
-                cover = covers[0]
-                fmt = getattr(cover, 'imageformat', None)
-                mime = 'image/png' if fmt == getattr(cover, 'FORMAT_PNG', object()) else 'image/jpeg'
-                return _save_cover(bytes(cover), mime, local_file_path, covers_dir)
-    except Exception:
-        pass
-    # FLAC (and some others) expose parsed picture blocks directly.
-    try:
-        pictures = getattr(audio, 'pictures', None)
-        if pictures:
-            pic = pictures[0]
-            return _save_cover(pic.data, pic.mime, local_file_path, covers_dir)
-    except Exception:
-        pass
-    # Ogg Vorbis/Opus store art as a base64 FLAC Picture in a Vorbis comment.
-    try:
-        if tags is not None:
-            import base64
-            from mutagen.flac import Picture
-            for key in ('metadata_block_picture', 'METADATA_BLOCK_PICTURE'):
-                values = tags.get(key)
-                if values:
-                    pic = Picture(base64.b64decode(values[0]))
-                    return _save_cover(pic.data, pic.mime, local_file_path, covers_dir)
-    except Exception:
-        pass
-    return None
-
-
 def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=None):
-    """Return a dict of display metadata, degrading gracefully to filename-only.
+    """Return display metadata derived without opening the audio file.
 
-    A standalone folder cover (``folder_cover_url``) takes priority over embedded
-    ID3 art; embedded art is only extracted when no folder cover exists.
+    Reading ID3/tag metadata and embedded cover art meant opening every file —
+    the dominant cost of generation, especially over a network share — so it is
+    intentionally not done. Titles come from the filename and cover art from
+    standalone folder images (``folder_cover_url``) only.
     """
-    meta = {
+    return {
         'title': clean_title_from_filename(filename),
         'artist': '',
         'album': '',
         'duration': '',
         'cover_url': folder_cover_url,
     }
-    if MutagenFile is None:
-        return meta
-    try:
-        audio = MutagenFile(local_file_path)
-        if audio is None:
-            return meta
-        if getattr(audio, 'info', None) is not None:
-            meta['duration'] = format_duration(getattr(audio.info, 'length', 0))
-
-        def first(tag):
-            try:
-                value = audio.get(tag)
-            except Exception:
-                value = None
-            if not value:
-                return ''
-            if isinstance(value, list):
-                value = value[0]
-            return str(value).strip()
-
-        title = first('TIT2') or first('title') or first('\xa9nam')
-        artist = first('TPE1') or first('artist') or first('\xa9ART')
-        album = first('TALB') or first('album') or first('\xa9alb')
-        if title:
-            meta['title'] = title
-        meta['artist'] = artist
-        meta['album'] = album
-        if folder_cover_url:
-            meta['cover_url'] = folder_cover_url
-        else:
-            meta['cover_url'] = _extract_cover(audio, local_file_path, covers_dir)
-    except Exception:
-        # Corrupt/odd file: keep the filename-derived defaults.
-        pass
-    return meta
 
 
 def header_html(file_name, mp3_files, parent_file_name=None, display_name=None):
@@ -509,21 +388,15 @@ def resolve_folder_cover(folder_path, covers_dir):
     Resolution order:
       1. A standalone cover image in this folder (or an art-only subfolder),
          via :func:`find_folder_cover`.
-      2. Embedded art from the first audio track directly in this folder.
-      3. Recurse into the first (sorted) subfolder that contains audio, so a
+      2. Recurse into the first (sorted) subfolder that contains audio, so a
          folder holding only subfolders inherits art from the first one — even
          when it lives several levels deep.
+
+    Embedded track art is intentionally not read (see :func:`extract_metadata`).
     """
     cover_url = _save_cover_file(find_folder_cover(folder_path), covers_dir)
     if cover_url:
         return cover_url
-
-    mp3_files = get_mp3_files(folder_path)
-    if mp3_files:
-        first = mp3_files[0]
-        meta = extract_metadata(os.path.join(folder_path, first), first, covers_dir, None)
-        if meta['cover_url']:
-            return meta['cover_url']
 
     for sub in get_folders(folder_path):  # sorted, already filtered to audio-bearing
         cover_url = resolve_folder_cover(os.path.join(folder_path, sub), covers_dir)
@@ -536,17 +409,9 @@ def folder_card_meta(folder_path, covers_dir):
     """Return (cover_url, artist) for a folder's album-style card.
 
     Cover reuses :func:`resolve_folder_cover` (which descends into subfolders
-    when needed); artist is taken from the first audio track directly in the
-    folder (blank when there is none).
+    when needed). Artist is always blank — track tags are no longer read.
     """
-    cover_url = resolve_folder_cover(folder_path, covers_dir)
-    artist = ''
-    mp3_files = get_mp3_files(folder_path)
-    if mp3_files:
-        first = mp3_files[0]
-        meta = extract_metadata(os.path.join(folder_path, first), first, covers_dir, cover_url)
-        artist = meta['artist']
-    return cover_url, artist
+    return resolve_folder_cover(folder_path, covers_dir), ''
 
 
 def generate_folders_html(folders, local_path, covers_dir, folder_files):
