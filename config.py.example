@@ -14,4 +14,9 @@ site_name = 'MP3 Gallery'
 site_logo = '🎵'
 
 # Icon/text used for the per-track download link
-download_icon = '⬇'
+download_icon = '⬇''
+
+# Generate downsized cover-art thumbnails (max 480px on the longest edge)
+# alongside the originals. The gallery displays the thumbnails; full-res covers
+# are kept too. Existing thumbnails are not regenerated.
+generate_thumbnails = True

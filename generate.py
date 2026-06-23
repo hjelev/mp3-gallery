@@ -31,8 +31,17 @@ except ImportError:  # pragma: no cover - mutagen is a declared dependency
     MutagenFile = None
     ID3 = None
 
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - Pillow only needed for thumbnails
+    Image = None
+
 
 COVERS_SUBDIR = os.path.join('files', 'covers')
+
+# Longest-edge size (px) for generated cover thumbnails. Matches the largest
+# the cover ever renders (the grid "big image" view) scaled for HiDPI displays.
+THUMB_MAX_PX = 480
 
 # Map embedded picture mime types to file extensions.
 _MIME_EXT = {
@@ -136,6 +145,42 @@ def format_duration(seconds):
     return f'{minutes}:{secs:02d}'
 
 
+def _make_thumbnail(dest_path):
+    """Create a downsized ``<name>_cover_art<ext>`` sibling of a saved cover.
+
+    Resizes to at most ``THUMB_MAX_PX`` on the longest edge (aspect preserved,
+    never upscaled) and returns the thumbnail's basename, or ``None`` if Pillow
+    is unavailable or the image can't be processed. An existing thumbnail is
+    left untouched (not regenerated).
+    """
+    base, ext = os.path.splitext(dest_path)
+    thumb_path = f'{base}_cover_art{ext}'
+    if os.path.exists(thumb_path):
+        return os.path.basename(thumb_path)
+    if Image is None:
+        return None
+    try:
+        with Image.open(dest_path) as im:
+            im.thumbnail((THUMB_MAX_PX, THUMB_MAX_PX))
+            if ext.lower() in ('.jpg', '.jpeg') and im.mode in ('RGBA', 'LA', 'P'):
+                im = im.convert('RGB')
+            im.save(thumb_path)
+    except Exception:
+        return None
+    return os.path.basename(thumb_path)
+
+
+def _cover_web_path(dest):
+    """Web path for a saved cover ``dest``. When ``generate_thumbnails`` is
+    enabled, generate (once) and prefer a downsized ``_cover_art`` thumbnail."""
+    fname = os.path.basename(dest)
+    if getattr(config, 'generate_thumbnails', False):
+        thumb = _make_thumbnail(dest)
+        if thumb:
+            fname = thumb
+    return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
+
+
 def _save_cover(data, mime, local_file_path, covers_dir):
     """Write embedded cover bytes to the covers dir, return relative web path or None."""
     ext = _MIME_EXT.get((mime or '').lower(), 'jpg')
@@ -145,7 +190,7 @@ def _save_cover(data, mime, local_file_path, covers_dir):
     if not os.path.exists(dest):
         with open(dest, 'wb') as fh:
             fh.write(data)
-    return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
+    return _cover_web_path(dest)
 
 
 def _save_cover_file(src_path, covers_dir):
@@ -162,7 +207,7 @@ def _save_cover_file(src_path, covers_dir):
                 fh.write(src.read())
         except OSError:
             return None
-    return f'{COVERS_SUBDIR.replace(os.sep, "/")}/{fname}'
+    return _cover_web_path(dest)
 
 
 def _best_cover_in_dir(local_path):

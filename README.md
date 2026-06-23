@@ -7,6 +7,8 @@ Easiest way to host your mp3 collection online — generate a modern static HTML
 - 🎨 Clean, responsive design with light/dark themes (no Bootstrap dependency)
 - 🏷️ Reads ID3 metadata — title, artist, album and track duration
 - 🖼️ Extracts embedded cover art (falls back to a music glyph when none)
+- 🪶 Optional cover-art thumbnails (`generate_thumbnails`) — serves downsized
+  480px covers for faster loads while keeping the full-res originals
 - 🔍 Instant client-side search/filter of tracks and folders
 - ▶️ Sticky bottom player bar with scrubber, time, volume, prev/next
 - 🔀 Shuffle and 🔁 repeat (off / all / one) playback modes
