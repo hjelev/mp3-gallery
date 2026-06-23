@@ -708,6 +708,117 @@ body {
     .track-list:not(.grid-view) .track-actions { display: none; }
 }
 
+/* ---- Statistics page ---- */
+.stat-link .cover-fallback {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    padding-bottom: var(--sp-4);
+}
+
+.stat-section { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.stat-heading {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--sp-3);
+}
+
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    padding: var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--elev-1);
+}
+
+.stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--accent);
+}
+
+.stat-label {
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.stat-bars {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--elev-1);
+}
+
+.bar-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 160px) 1fr auto;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: 0.88rem;
+}
+
+.bar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.bar-track {
+    height: 10px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-grad);
+    min-width: 4px;
+}
+
+.bar-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
+.bar-extreme {
+    grid-column: 2 / -1;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stat-empty { padding: var(--sp-3) 0; }
+
+@media (max-width: 480px) {
+    .bar-row { grid-template-columns: minmax(64px, 96px) 1fr auto; }
+}
+
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

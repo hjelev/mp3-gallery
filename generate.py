@@ -5,6 +5,7 @@ import glob
 import hashlib
 import html
 import re
+from collections import Counter
 from urllib.parse import quote
 
 
@@ -149,6 +150,36 @@ def format_duration(seconds):
     if hours:
         return f'{hours}:{minutes:02d}:{secs:02d}'
     return f'{minutes}:{secs:02d}'
+
+
+def format_long_duration(seconds):
+    """Human-readable playtime for large totals, e.g. ``3 days, 4 hours, 12 min``."""
+    seconds = int(round(seconds or 0))
+    if seconds <= 0:
+        return '0 min'
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    parts = []
+    if days:
+        parts.append(f'{days} day' + ('s' if days != 1 else ''))
+    if hours:
+        parts.append(f'{hours} hour' + ('s' if hours != 1 else ''))
+    if minutes and not days:
+        parts.append(f'{minutes} min')
+    return ', '.join(parts) or '< 1 min'
+
+
+def format_filesize(num_bytes):
+    """Human-readable byte size, e.g. ``48.3 GB``."""
+    size = float(num_bytes or 0)
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if size < 1024 or unit == 'TB':
+            if unit == 'B':
+                return f'{int(size)} {unit}'
+            return f'{size:.1f} {unit}'
+        size /= 1024
+    return f'{size:.1f} TB'
 
 
 def _thumb_path(dest_path):
@@ -377,6 +408,10 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         'album': '',
         'duration': '',
         'cover_url': folder_cover_url,
+        'length': 0.0,
+        'genre': '',
+        'year': '',
+        'bitrate': 0,
     }
     if MutagenFile is None:
         return meta
@@ -385,7 +420,10 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         if audio is None:
             return meta
         if getattr(audio, 'info', None) is not None:
-            meta['duration'] = format_duration(getattr(audio.info, 'length', 0))
+            length = getattr(audio.info, 'length', 0) or 0
+            meta['length'] = float(length)
+            meta['duration'] = format_duration(length)
+            meta['bitrate'] = int(getattr(audio.info, 'bitrate', 0) or 0)
 
         def first(tag):
             try:
@@ -401,10 +439,15 @@ def extract_metadata(local_file_path, filename, covers_dir, folder_cover_url=Non
         title = first('TIT2') or first('title') or first('\xa9nam')
         artist = first('TPE1') or first('artist') or first('\xa9ART')
         album = first('TALB') or first('album') or first('\xa9alb')
+        genre = first('TCON') or first('genre') or first('\xa9gen')
+        year = first('TDRC') or first('date') or first('\xa9day') or first('TYER')
         if title:
             meta['title'] = title
         meta['artist'] = artist
         meta['album'] = album
+        meta['genre'] = genre
+        match = re.search(r'\d{4}', year)
+        meta['year'] = match.group(0) if match else ''
         if folder_cover_url:
             meta['cover_url'] = folder_cover_url
         else:
@@ -546,12 +589,73 @@ def generate_folders_html(folders, local_path, covers_dir, folder_files):
     return folders_html
 
 
-def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url=None):
+def new_stats():
+    """Fresh accumulator for collection-wide statistics (see statistics_page_html)."""
+    return {
+        'tracks': 0,
+        'albums': 0,            # folders directly containing audio
+        'total_seconds': 0.0,
+        'total_bytes': 0,
+        'artists': Counter(),
+        'genres': Counter(),
+        'decades': Counter(),
+        'formats': Counter(),
+        'bitrate_sum': 0,
+        'bitrate_n': 0,
+        'longest': None,        # (seconds, title)
+        'shortest': None,       # (seconds, title)
+    }
+
+
+def accumulate_stats(stats, meta, local_file_path, filename):
+    """Fold one track's metadata into the running ``stats`` accumulator."""
+    stats['tracks'] += 1
+
+    length = meta.get('length') or 0.0
+    stats['total_seconds'] += length
+
+    try:
+        stats['total_bytes'] += os.path.getsize(local_file_path)
+    except OSError:
+        pass
+
+    if meta.get('artist'):
+        stats['artists'][meta['artist']] += 1
+    if meta.get('genre'):
+        stats['genres'][meta['genre']] += 1
+    if meta.get('year'):
+        try:
+            decade = f"{int(meta['year']) // 10 * 10}s"
+            stats['decades'][decade] += 1
+        except ValueError:
+            pass
+
+    ext = os.path.splitext(filename)[1].lstrip('.').lower()
+    if ext:
+        stats['formats'][ext] += 1
+
+    bitrate = meta.get('bitrate') or 0
+    if bitrate > 0:
+        stats['bitrate_sum'] += bitrate
+        stats['bitrate_n'] += 1
+
+    if length > 0:
+        title = meta.get('title') or filename
+        if stats['longest'] is None or length > stats['longest'][0]:
+            stats['longest'] = (length, title)
+        if stats['shortest'] is None or length < stats['shortest'][0]:
+            stats['shortest'] = (length, title)
+
+
+def generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url=None, stats=None):
     mp3_html = ''
     for index, mp3_file in enumerate(mp3_files, start=1):
         mp3_public_path = os.path.join(public_path, mp3_file)
         local_file_path = os.path.join(local_path, mp3_file)
         meta = extract_metadata(local_file_path, mp3_file, covers_dir, folder_cover_url)
+
+        if stats is not None:
+            accumulate_stats(stats, meta, local_file_path, mp3_file)
 
         title = html.escape(meta['title'])
         artist = html.escape(meta['artist'])
@@ -673,20 +777,167 @@ def footer_html(file_name, mp3_files, folders, total_mp3_count):
     return footer
 
 
+def _stat_card(value, label):
+    return (
+        '<div class="stat-card">'
+        f'<span class="stat-value">{html.escape(str(value))}</span>'
+        f'<span class="stat-label">{html.escape(label)}</span>'
+        '</div>'
+    )
+
+
+def _bar_chart(counter, limit=10, value_fmt=None):
+    """Render a pure-CSS horizontal bar chart from a Counter (top ``limit``)."""
+    items = counter.most_common(limit)
+    if not items:
+        return '<p class="stat-empty muted">No data available.</p>'
+    top = items[0][1] or 1
+    rows = ''
+    for label, count in items:
+        pct = max(2, round(count / top * 100))
+        shown = value_fmt(count) if value_fmt else str(count)
+        rows += (
+            '<div class="bar-row">'
+            f'<span class="bar-label" title="{html.escape(str(label))}">{html.escape(str(label))}</span>'
+            '<span class="bar-track">'
+            f'<span class="bar-fill" style="width:{pct}%"></span>'
+            '</span>'
+            f'<span class="bar-value">{html.escape(shown)}</span>'
+            '</div>\n'
+        )
+    return f'<div class="stat-bars">{rows}</div>'
+
+
+def statistics_page_html(stats):
+    """Build the standalone Statistics page from a collected ``stats`` dict.
+
+    Reuses ``style.css`` and ``audioPlayer.js`` (theme toggle works; the player
+    block self-disables when there's no ``#player`` element on the page).
+    """
+    title = html.escape(config.site_name)
+    logo = html.escape(config.site_logo)
+
+    tracks = stats['tracks']
+    avg_len = stats['total_seconds'] / tracks if tracks else 0
+    avg_bitrate = (stats['bitrate_sum'] / stats['bitrate_n']) if stats['bitrate_n'] else 0
+
+    cards = ''.join([
+        _stat_card(f'{tracks:,}', 'Tracks'),
+        _stat_card(f"{stats['albums']:,}", 'Albums'),
+        _stat_card(format_long_duration(stats['total_seconds']), 'Total playtime'),
+        _stat_card(format_filesize(stats['total_bytes']), 'Total size'),
+        _stat_card(f"{len(stats['artists']):,}", 'Unique artists'),
+        _stat_card(f"{len(stats['genres']):,}", 'Genres'),
+        _stat_card(format_duration(avg_len) or '—', 'Avg track length'),
+        _stat_card(f'{round(avg_bitrate / 1000)} kbps' if avg_bitrate else '—', 'Avg bitrate'),
+    ])
+
+    def extreme(entry):
+        if not entry:
+            return '—'
+        seconds, name = entry
+        return f'{name} ({format_duration(seconds)})'
+
+    sections = f"""
+                <section class="stat-section">
+                    <div class="stat-grid">{cards}</div>
+                </section>
+                <section class="stat-section">
+                    <h2 class="stat-heading">Top artists</h2>
+                    {_bar_chart(stats['artists'], limit=10)}
+                </section>
+                <section class="stat-section">
+                    <h2 class="stat-heading">Top genres</h2>
+                    {_bar_chart(stats['genres'], limit=10)}
+                </section>
+                <section class="stat-section">
+                    <h2 class="stat-heading">Tracks by decade</h2>
+                    {_bar_chart(stats['decades'], limit=12)}
+                </section>
+                <section class="stat-section">
+                    <h2 class="stat-heading">Formats</h2>
+                    {_bar_chart(stats['formats'], limit=12)}
+                </section>
+                <section class="stat-section">
+                    <h2 class="stat-heading">Extremes</h2>
+                    <div class="stat-bars">
+                        <div class="bar-row"><span class="bar-label">Longest track</span>
+                            <span class="bar-extreme">{html.escape(extreme(stats['longest']))}</span></div>
+                        <div class="bar-row"><span class="bar-label">Shortest track</span>
+                            <span class="bar-extreme">{html.escape(extreme(stats['shortest']))}</span></div>
+                    </div>
+                </section>
+    """
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Statistics · {title}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+        <link rel="stylesheet" href="files/style.css">
+        <link rel="icon" type="image/x-icon" href="https://icons.iconarchive.com/icons/icondesigner.net/hyperion/32/Sidebar-Music-icon.png">
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="topbar-inner">
+                <a id="backButton" href="{page_href('index.html')}" class="icon-btn" title="Back" aria-label="Back">‹</a>
+                <h1 class="site-title"><span class="site-logo">{logo}</span> Statistics</h1>
+                <div class="topbar-actions">
+                    <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+                </div>
+            </div>
+        </header>
+        <main class="container">
+            <div class="stats">{sections}</div>
+        </main>
+        <footer class="footer">
+            <span class="muted">{tracks:,} tracks · {format_filesize(stats['total_bytes'])}</span>
+        </footer>
+        <script src="files/audioPlayer.js"></script>
+    </body>
+    </html>
+    """
+
+
 def save_html(html_text, html_folder, file_name='index.html'):
     with open(os.path.join(html_folder, file_name), 'w') as f:
         f.write(html_text)
 
 
-def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None, parent_file_name=None, display_name=None):
+def statistics_link_html():
+    """Special home-page entry (last in the list) linking to the stats page."""
+    return (
+        '<li class="folder-row stat-link" data-title="Statistics">'
+        f'<a href="{page_href("statistics.html")}">'
+        '<span class="folder-cover"><span class="cover-fallback">📊</span></span>'
+        '<span class="folder-meta">'
+        '<span class="folder-name">Statistics</span>'
+        '<span class="folder-sub">Collection overview</span>'
+        '</span>'
+        '<span class="chevron">›</span>'
+        '</a></li>\n'
+    )
+
+
+def process_collection(local_path, public_path, html_folder, file_name, covers_dir, generated=None, parent_file_name=None, display_name=None, stats=None):
     if generated is None:
         generated = set()
     generated.add(file_name)
+    # statistics.html is generated separately after the walk; reserve its name
+    # up front so a user folder can never slug to it.
+    generated.add('statistics.html')
 
     total_mp3_count = count_mp3_files(local_path)
     folders = get_folders(local_path)
     mp3_files = get_mp3_files(local_path)
     folder_cover_url = _save_cover_file(find_folder_cover(local_path), covers_dir)
+
+    if stats is not None and mp3_files:
+        stats['albums'] += 1
 
     # Reserve a unique slugified page name per child folder up front, so the
     # folder-card links and the recursive page writes agree on the filename.
@@ -694,14 +945,16 @@ def process_collection(local_path, public_path, html_folder, file_name, covers_d
 
     page = header_html(file_name, mp3_files, parent_file_name, display_name)
     page += generate_folders_html(folders, local_path, covers_dir, folder_files)
-    page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url)
+    page += generate_mp3_html(public_path, mp3_files, local_path, covers_dir, folder_cover_url, stats)
+    if file_name == 'index.html':
+        page += statistics_link_html()
     page += footer_html(file_name, mp3_files, folders, total_mp3_count)
     save_html(page, html_folder, file_name)
 
     for folder in folders:
         folder_path = os.path.join(local_path, folder)
         folder_public_path = os.path.join(public_path, folder)
-        process_collection(folder_path, folder_public_path, html_folder, folder_files[folder], covers_dir, generated, parent_file_name=file_name, display_name=folder)
+        process_collection(folder_path, folder_public_path, html_folder, folder_files[folder], covers_dir, generated, parent_file_name=file_name, display_name=folder, stats=stats)
 
     return generated
 
@@ -728,7 +981,9 @@ def prune_orphaned_html(html_folder, generated):
 if __name__ == '__main__':
     covers_dir = os.path.join(config.html_folder, COVERS_SUBDIR)
     os.makedirs(covers_dir, exist_ok=True)
-    generated = process_collection(config.local_path, config.public_path, config.html_folder, 'index.html', covers_dir)
+    stats = new_stats()
+    generated = process_collection(config.local_path, config.public_path, config.html_folder, 'index.html', covers_dir, stats=stats)
+    save_html(statistics_page_html(stats), config.html_folder, 'statistics.html')
     removed = prune_orphaned_html(config.html_folder, generated)
     if removed:
         print(f'Removed {len(removed)} orphaned HTML file(s): ' + ', '.join(sorted(removed)))
